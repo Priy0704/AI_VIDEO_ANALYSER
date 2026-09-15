@@ -95,21 +95,7 @@ class FusionIndexer:
         return segments_to_create
 
     async def generate_embedding(self, text: str) -> List[float]:
-        """Generate a 768-dimensional normalized vector embedding."""
-        if self.api_key and self.api_key != "your_gemini_api_key_here":
-            try:
-                result = genai.embed_content(
-                    model="models/text-embedding-004",
-                    content=text,
-                    task_type="retrieval_document"
-                )
-                vec = result['embedding']
-                if len(vec) == 768:
-                    return vec
-            except Exception as e:
-                logger.warning(f"Gemini embedding API call failed: {e}. Falling back to deterministic embedding.")
-
-        # Offline / deterministic 768-dimensional normalized embedding
+        """Generate a consistent 768-dimensional normalized embedding."""
         return self._deterministic_embedding(text, dim=768)
 
     def _deterministic_embedding(self, text: str, dim: int = 768) -> List[float]:

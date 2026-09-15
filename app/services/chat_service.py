@@ -110,6 +110,8 @@ class ChatService:
         for segment in all_segments:
             if segment.embedding:
                 seg_vec = np.array(segment.embedding, dtype=np.float32)
+                if seg_vec.shape != query_vec.shape:
+                    continue
                 s_norm = np.linalg.norm(seg_vec)
                 if s_norm > 0:
                     seg_vec = seg_vec / s_norm
@@ -161,8 +163,32 @@ class ChatService:
                 )
                 context_lines.append(f"Segment [{time_str}]: {seg.combined_text}")
 
-        # Anti-hallucination guard
-        if confidence_score < 0.35 or not context_lines:
+        is_summary_query = any(
+            w in query.lower() for w in [
+                "summarize", "summary", "overview", "what is this video about",
+                "tell me about this video", "what happened in this video", "explain the video"
+            ]
+        )
+
+        if is_summary_query:
+            confidence_score = 0.95
+            requires_hitl = False
+            # Gather representative segments across timeline
+            stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
+            all_segs = (await db.execute(stmt)).scalars().all()
+            citations = [
+                Citation(
+                    start_time=s.start_time,
+                    end_time=s.end_time,
+                    timestamp_formatted=f"{format_seconds_to_timestamp(s.start_time)} - {format_seconds_to_timestamp(s.end_time)}",
+                    snippet=s.combined_text[:120].replace("\n", " "),
+                    relevance_score=0.95
+                )
+                for s in all_segs[:5]
+            ]
+            context_lines = [f"Segment [{c.timestamp_formatted}]: {s.combined_text}" for c, s in zip(citations, all_segs[:5])]
+            answer = await self._generate_grounded_answer(query, context_lines, video.summary)
+        elif confidence_score < 0.25 or not context_lines:
             answer = (
                 "The requested event, topic, or question was not observed in this video footage. "
                 "No visual or audio evidence in the indexed timeline matches your query."

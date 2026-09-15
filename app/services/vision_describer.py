@@ -26,38 +26,53 @@ class VisionDescriber:
             genai.configure(api_key=self.api_key)
 
     async def describe_frames(self, frame_samples: List[FrameSample]) -> List[VisualObservation]:
-        """Generate concise, dense visual descriptions for each sampled frame."""
+        """Generate rich, dense visual descriptions across video keyframes using batched multimodal calls."""
         if not frame_samples:
             return []
 
-        observations: List[VisualObservation] = []
-
-        # If Gemini is configured, use Gemini Vision
+        # If Gemini is configured, use batched multimodal perception
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             try:
-                # Process frames with controlled concurrency (e.g., 3 at a time)
-                semaphore = asyncio.Semaphore(3)
+                # Downsample to at most 6 representative keyframes across the video to respect 5-RPM free-tier limits
+                step = max(1, len(frame_samples) // 6)
+                selected_samples = frame_samples[::step][:6]
 
-                async def process_one(sample: FrameSample) -> VisualObservation:
-                    async with semaphore:
-                        desc = await self._describe_with_gemini(sample.image_path, sample.timestamp)
-                        return VisualObservation(timestamp=sample.timestamp, description=desc)
+                images = [Image.open(s.image_path) for s in selected_samples]
+                time_stamps_str = ", ".join(f"{s.timestamp:.1f}s" for s in selected_samples)
+                prompt = (
+                    f"You are a multimodal video perception engine. The following {len(images)} frames represent "
+                    f"chronological moments in the video at timestamps: {time_stamps_str}.\n"
+                    "Analyze and describe in detail:\n"
+                    "1. The environment, room, and setting.\n"
+                    "2. People present: clothing (colors, polo/t-shirt, lanyards, accessories) and their actions/gestures.\n"
+                    "3. Objects, devices, TV/monitors, screens, and any visible presentation slides, text, or interface.\n"
+                    "4. The sequence of events taking place."
+                )
 
-                tasks = [process_one(sample) for sample in frame_samples]
-                observations = await asyncio.gather(*tasks)
-                return sorted(observations, key=lambda x: x.timestamp)
+                model = genai.GenerativeModel(settings.GEMINI_MODEL)
+                response = await model.generate_content_async([prompt] + images)
+                dense_desc = response.text.strip()
+                logger.info(f"Batched Gemini perception succeeded: {dense_desc[:150]}...")
+
+                # Associate the rich visual perception across the video timeline
+                return [
+                    VisualObservation(
+                        timestamp=s.timestamp,
+                        description=f"At timestamp {s.timestamp:.1f}s: {dense_desc}"
+                    )
+                    for s in frame_samples
+                ]
             except Exception as e:
-                logger.error(f"Gemini vision batch failed: {e}. Falling back to offline baseline.")
+                logger.error(f"Gemini batched vision call failed: {e}. Falling back to offline baseline.")
 
         # Offline / Mock Fallback
-        for sample in frame_samples:
-            observations.append(
-                VisualObservation(
-                    timestamp=sample.timestamp,
-                    description=self._offline_frame_description(sample.timestamp)
-                )
+        return [
+            VisualObservation(
+                timestamp=s.timestamp,
+                description=self._offline_frame_description(s.timestamp)
             )
-        return observations
+            for s in frame_samples
+        ]
 
     async def _describe_with_gemini(self, image_path: Path, timestamp: float) -> str:
         """Call Gemini Vision model for a single keyframe."""
