@@ -117,7 +117,10 @@ async function loadVideoList() {
 
         listContainer.innerHTML = videos.map(v => `
             <div class="video-item ${v.video_id === currentVideoId ? 'active' : ''}" onclick="selectVideo('${v.video_id}')">
-                <div class="video-name">${v.filename}</div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+                    <div class="video-name" style="flex: 1; word-break: break-all;">${v.filename}</div>
+                    <button class="btn-delete-video" title="Delete video" onclick="deleteVideo(event, '${v.video_id}')">✕</button>
+                </div>
                 <div class="video-meta">
                     <span>${v.duration_seconds ? v.duration_seconds.toFixed(1) + 's' : 'N/A'}</span>
                     <span style="color: ${v.status === 'completed' ? '#22c55e' : v.status === 'failed' ? '#ef4444' : '#38bdf8'}">${v.status}</span>
@@ -132,6 +135,29 @@ async function loadVideoList() {
         }
     } catch (e) {
         console.error("Error loading videos:", e);
+    }
+}
+
+async function deleteVideo(event, videoId) {
+    event.stopPropagation();
+    if (!confirm("Are you sure you want to delete this video?")) return;
+
+    try {
+        const res = await fetch(`/api/v1/videos/${videoId}`, { method: "DELETE" });
+        if (res.ok) {
+            if (currentVideoId === videoId) {
+                currentVideoId = null;
+                document.getElementById("videoPlayer").src = "";
+                document.getElementById("playerTitle").innerText = "Select a video";
+                document.getElementById("summaryText").innerHTML = "";
+                document.getElementById("chatMessages").innerHTML = '<div class="message assistant">Select or upload a video to begin analysis.</div>';
+            }
+            loadVideoList();
+        } else {
+            alert("Failed to delete video.");
+        }
+    } catch (e) {
+        console.error("Error deleting video:", e);
     }
 }
 

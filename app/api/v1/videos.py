@@ -180,6 +180,41 @@ async def get_video_detail(
     )
 
 
+@router.delete(
+    "/{video_id}",
+    summary="Delete video and all associated segments and files"
+)
+async def delete_video(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a video, cascading to its segments, sessions, reviews, and removing stored files."""
+    video = await db.get(Video, video_id)
+    if not video:
+        raise VideoNotFoundError(video_id)
+
+    # Delete video file from storage
+    try:
+        p = Path(video.file_path)
+        if p.exists():
+            p.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    # Delete keyframes directory from storage
+    try:
+        kf_dir = Path(settings.KEYFRAME_DIR) / video_id
+        if kf_dir.exists():
+            shutil.rmtree(kf_dir, ignore_errors=True)
+    except Exception:
+        pass
+
+    await db.delete(video)
+    await db.commit()
+
+    return {"status": "deleted", "video_id": video_id}
+
+
 @router.get(
     "/{video_id}/stream",
     summary="Stream video file with HTTP range request support"

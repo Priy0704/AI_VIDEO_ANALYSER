@@ -59,3 +59,24 @@ async def async_client():
     # Wait for any running background tasks before tear down
     if task_queue.active_tasks:
         await asyncio.gather(*task_queue.active_tasks.values(), return_exceptions=True)
+
+    # Clean up test videos from database and storage so tests do not clutter user list
+    from app.db.database import AsyncSessionLocal
+    from app.db.models import Video
+    from sqlalchemy import select
+    import os
+
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(
+            select(Video).where(
+                Video.filename.in_(["hitl_test.mp4", "chat_test.mp4", "sample.mp4", "demo.mp4", "test_sample.mp4"])
+            )
+        )
+        for v in res.scalars().all():
+            try:
+                if v.file_path and os.path.exists(v.file_path):
+                    os.remove(v.file_path)
+            except Exception:
+                pass
+            await db.delete(v)
+        await db.commit()
