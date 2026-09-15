@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:13
+    container_name: video_analyser_pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: video_analyser
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d video_analyser"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video_analyser_api
+    environment:
+      - APP_NAME=AI Video Analyser & Chat
+      - APP_ENV=production
+      - PORT=8090
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/video_analyser
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - FRAME_SAMPLE_INTERVAL_SEC=3.0
+      - MAX_CONCURRENT_WORKERS=2
+      - CONFIDENCE_THRESHOLD=0.70
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
