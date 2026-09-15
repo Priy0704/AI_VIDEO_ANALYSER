@@ -20,8 +20,9 @@ def event_loop():
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
-    """Ensure data directories exist and test db is initialized."""
+    """Ensure data directories exist and run tests offline to preserve API quota."""
     settings.init_storage()
+    settings.GEMINI_API_KEY = None
 
 
 @pytest.fixture
