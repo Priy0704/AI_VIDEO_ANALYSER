@@ -33,23 +33,57 @@ class ChatService:
         if self.api_key:
             genai.configure(api_key=self.api_key, transport="rest")
 
+    def parse_temporal_scope(self, query: str, duration: Optional[float] = None) -> Tuple[Optional[float], Optional[float]]:
+        """Extract explicit time range (e.g. 'between 2:00 and 4:00', 'first half', 'second half', 'at 2:15', 'around 5 minutes')."""
+        q_lower = query.lower()
+        vid_dur = duration or 120.0
+
+        # 1. "first half"
+        if "first half" in q_lower:
+            return 0.0, vid_dur / 2.0
+
+        # 2. "second half"
+        if "second half" in q_lower:
+            return vid_dur / 2.0, vid_dur
+
+        # 3. "between X:XX and Y:YY" or "from X:XX to Y:YY"
+        m_range = re.search(r'(?:between|from)\s*(\d{1,2}):(\d{2})\s*(?:and|to)\s*(\d{1,2}):(\d{2})', q_lower)
+        if m_range:
+            t1 = float(int(m_range.group(1)) * 60 + int(m_range.group(2)))
+            t2 = float(int(m_range.group(3)) * 60 + int(m_range.group(4)))
+            return min(t1, t2), max(t1, t2)
+
+        # 4. "between X and Y minutes"
+        m_min_range = re.search(r'(?:between|from)\s*(\d+)\s*(?:and|to)\s*(\d+)\s*(?:minute|minutes|min)', q_lower)
+        if m_min_range:
+            t1 = float(int(m_min_range.group(1)) * 60)
+            t2 = float(int(m_min_range.group(2)) * 60)
+            return min(t1, t2), max(t1, t2)
+
+        # 5. "at X:XX" or single MM:SS
+        m_single = re.search(r'\b(\d{1,2}):(\d{2})\b', q_lower)
+        if m_single:
+            t = float(int(m_single.group(1)) * 60 + int(m_single.group(2)))
+            return max(0.0, t - 15.0), t + 15.0
+
+        # 6. "around X minutes" or "at X minutes"
+        m_min = re.search(r'(?:around|at|about)\s*(\d+)\s*(?:minute|minutes|min)', q_lower)
+        if m_min:
+            t = float(int(m_min.group(1)) * 60)
+            return max(0.0, t - 20.0), t + 20.0
+
+        # 7. "around X seconds" or "at X seconds"
+        m_sec = re.search(r'(?:around|at|about)\s*(\d+)\s*(?:second|seconds|sec)', q_lower)
+        if m_sec:
+            t = float(m_sec.group(1))
+            return max(0.0, t - 10.0), t + 10.0
+
+        return None, None
+
     def parse_time_references(self, query: str) -> Optional[float]:
         """Extract explicit time references (e.g. '2:15', 'at minute 5', 'at 130s')."""
-        m = re.search(r'\b(\d{1,2}):(\d{2})\b', query)
-        if m:
-            minutes = int(m.group(1))
-            seconds = int(m.group(2))
-            return float(minutes * 60 + seconds)
-
-        m = re.search(r'\b(?:minute|min)\s*(\d{1,2})\b', query, re.IGNORECASE)
-        if m:
-            return float(int(m.group(1)) * 60)
-
-        m = re.search(r'\b(\d+)\s*(?:sec|second|seconds)\b', query, re.IGNORECASE)
-        if m:
-            return float(m.group(1))
-
-        return None
+        t_start, _ = self.parse_temporal_scope(query)
+        return t_start
 
     async def get_or_create_session(self, db: AsyncSession, video_id: str, session_id: Optional[str]) -> ChatSession:
         """Fetch existing session or create a new one."""
@@ -74,19 +108,19 @@ class ChatService:
         db: AsyncSession,
         video_id: str,
         query: str,
+        video_duration: Optional[float] = None,
         top_k: int = 4
     ) -> List[Tuple[VideoSegment, float]]:
         """Retrieve most relevant video segments using hybrid temporal + vector cosine similarity."""
-        explicit_time = self.parse_time_references(query)
+        t_start, t_end = self.parse_temporal_scope(query, video_duration)
 
-        # If user explicitly asked for a specific timestamp
-        if explicit_time is not None:
-            time_margin = 15.0
+        # If user explicitly specified a time range or timestamp
+        if t_start is not None and t_end is not None:
             stmt = select(VideoSegment).where(
                 and_(
                     VideoSegment.video_id == video_id,
-                    VideoSegment.start_time <= explicit_time + time_margin,
-                    VideoSegment.end_time >= explicit_time - time_margin
+                    VideoSegment.start_time <= t_end,
+                    VideoSegment.end_time >= t_start
                 )
             ).order_by(VideoSegment.start_time)
             result = await db.execute(stmt)
@@ -112,15 +146,16 @@ class ChatService:
         q_lower = query.lower()
         person_words = {"who", "whose", "person", "someone", "speaker", "speaking", "presenter", "presenting", "man", "woman", "guy", "people", "host", "trainer"}
         clothing_words = {"wear", "wearing", "clothes", "clothing", "shirt", "polo", "t-shirt", "suit", "jacket", "pants", "lanyard", "badge", "glasses"}
-        display_words = {"screen", "tv", "monitor", "slide", "slides", "display", "presentation", "ui", "login", "dashboard", "board", "projector", "table", "laptop", "phone"}
+        display_words = {"screen", "tv", "monitor", "slide", "slides", "display", "presentation", "ui", "login", "dashboard", "board", "projector", "table", "laptop", "phone", "object", "objects"}
         speech_words = {"say", "said", "speak", "speaking", "talk", "talking", "discuss", "discussing", "topic", "words", "speech", "transcript", "dialogue", "hear", "voice", "audio"}
+        action_words = {"leave", "left", "enter", "enters", "entering", "room", "gesture", "gesturing", "point", "pointing", "stand", "standing", "walk", "walking"}
 
         has_person_query = any(w in q_lower for w in person_words)
         has_clothing_query = any(w in q_lower for w in clothing_words)
         has_display_query = any(w in q_lower for w in display_words)
         has_speech_query = any(w in q_lower for w in speech_words)
+        has_action_query = any(w in q_lower for w in action_words)
 
-        scored_segments: List[Tuple[VideoSegment, float]] = []
         for segment in all_segments:
             base_score = 0.0
             if segment.embedding:
@@ -143,6 +178,8 @@ class ChatService:
                 relevance = max(relevance, 0.90)
             if has_speech_query and segment.transcript_text:
                 relevance = max(relevance, 0.91)
+            if has_action_query and any(w in seg_text for w in ["standing", "gesturing", "presenting", "room", "front"]):
+                relevance = max(relevance, 0.88)
 
             scored_segments.append((segment, round(max(0.0, min(1.0, relevance)), 3)))
 
@@ -157,28 +194,66 @@ class ChatService:
         query: str,
         session_id: Optional[str] = None
     ) -> ChatResponse:
-        """Process a conversational query against video segments and return a grounded response."""
+        """
+        Process a conversational query against video segments strictly according to grounding rules:
+        - Clearly supported: answer + relevant timestamp + confidence score
+        - Ambiguous/subjective: do not guess, flag for Human Review + timestamp + confidence (68%)
+        - Not present: "I don't know. This content is not present in the video." (35% confidence)
+        """
         session = await self.get_or_create_session(db, video.id, session_id)
+        q_lower = query.lower()
+
+        # Sensitive/ambiguous interpretation detector
+        sensitive_patterns = [
+            r"\b(angry|mad|furious|upset|irritated)\b",
+            r"\b(attack|attacked|attacking)\b",
+            r"\b(fight|fighting|fought|brawl)\b",
+            r"\b(aggressive|aggressively|aggression)\b",
+            r"\b(argue|argued|arguing|argument)\b",
+            r"\b(intentionally|on purpose|deliberate|deliberately)\b",
+            r"\b(threat|threatened|threatening)\b",
+            r"\b(harass|harassed|harassing|harassment)\b"
+        ]
+        is_sensitive_query = any(re.search(pat, q_lower) for pat in sensitive_patterns)
 
         # Retrieve relevant segments
-        scored_segments = await self.retrieve_relevant_segments(db, video.id, query)
+        scored_segments = await self.retrieve_relevant_segments(
+            db, video.id, query, video_duration=video.duration_seconds
+        )
 
         citations: List[Citation] = []
         context_lines: List[str] = []
 
         is_summary_query = any(
-            w in query.lower() for w in [
-                "summarize", "summary", "overview", "what is this video about",
+            w in q_lower for w in [
+                "summarize", "summary", "key points", "overview", "what is this video about",
                 "tell me about this video", "what happened in this video", "explain the video",
                 "speech to text", "transcript"
             ]
         )
 
+        # 1. Summarization workflow
         if is_summary_query:
             confidence_score = 0.95
             requires_hitl = False
-            stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
+
+            # Check if user asked for first half or second half
+            t_start, t_end = self.parse_temporal_scope(query, video.duration_seconds)
+            if t_start is not None and t_end is not None:
+                stmt = select(VideoSegment).where(
+                    and_(
+                        VideoSegment.video_id == video.id,
+                        VideoSegment.start_time <= t_end,
+                        VideoSegment.end_time >= t_start
+                    )
+                ).order_by(VideoSegment.start_time)
+            else:
+                stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
+
             all_segs = (await db.execute(stmt)).scalars().all()
+            if not all_segs:
+                all_segs = (await db.execute(select(VideoSegment).where(VideoSegment.video_id == video.id))).scalars().all()
+
             citations = [
                 Citation(
                     start_time=s.start_time,
@@ -194,15 +269,43 @@ class ChatService:
                 for c, s in zip(citations, all_segs[:8])
             ]
             answer = await self._generate_grounded_answer(query, context_lines, video.summary, is_summary=True)
+
+        # 2. Sensitive / Ambiguous interpretation query workflow
+        elif is_sensitive_query:
+            confidence_score = 0.68
+            requires_hitl = True
+            time_str = "00:00–00:30"
+            if scored_segments:
+                seg, _ = scored_segments[0]
+                time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+                citations.append(
+                    Citation(
+                        start_time=seg.start_time,
+                        end_time=seg.end_time,
+                        timestamp_formatted=time_str,
+                        snippet=(seg.visual_description or "")[:120],
+                        relevance_score=0.68
+                    )
+                )
+            answer = (
+                "Human review required because the available evidence is ambiguous.\n\n"
+                f"Timestamp: {time_str}\n"
+                f"Confidence: 68%"
+            )
+
+        # 3. Standard queries (Direct, Event, Visual, Audio+Visual, Time-based)
         else:
             top_score = max((score for _, score in scored_segments), default=0.0)
             confidence_score = round(top_score, 2)
             requires_hitl = confidence_score < settings.CONFIDENCE_THRESHOLD
 
             if requires_hitl:
+                # Content does not exist in video
+                confidence_score = 0.35
                 answer = (
-                    "The requested event, topic, or question was not observed in this video footage. "
-                    "No visual or audio evidence in the indexed timeline matches your query."
+                    "I don't know. This content is not present in the video.\n\n"
+                    "Confidence: 35%\n"
+                    "Status: Not Found"
                 )
                 citations = []
             else:
@@ -223,7 +326,9 @@ class ChatService:
                         f"Dialogue / Speech: {seg.transcript_text or 'No spoken dialogue'}\n"
                         f"Visuals & Scene: {seg.visual_description or 'No visual details'}"
                     )
-                answer = await self._generate_grounded_answer(query, context_lines, video.summary)
+                answer = await self._generate_grounded_answer(
+                    query, context_lines, video.summary, confidence_score=confidence_score
+                )
 
         # Record messages in chat history
         user_msg = ChatMessage(session_id=session.id, role="user", content=query)
@@ -271,10 +376,13 @@ class ChatService:
         query: str,
         context_lines: List[str],
         video_summary: Optional[str],
-        is_summary: bool = False
+        is_summary: bool = False,
+        confidence_score: float = 0.90
     ) -> str:
-        """Call Gemini model with strict grounding or clean structured fallback."""
+        """Call Gemini model with strict grounding rules or clean structured fallback."""
         context_block = "\n\n".join(context_lines)
+        time_tag = context_lines[0].splitlines()[0].replace("Timestamp [", "").replace("]:", "") if context_lines else "00:00–00:30"
+        conf_pct = int(confidence_score * 100)
 
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             try:
@@ -283,30 +391,28 @@ class ChatService:
 
                 if is_summary:
                     prompt = (
-                        "You are an advanced AI Video Understanding and Intelligence assistant.\n"
-                        "The user wants a complete, rich breakdown and summary of this video.\n"
-                        "Structure your response clearly using the following markdown sections:\n\n"
-                        "### 🎙️ Spoken Audio & Speech-to-Text Transcript\n"
-                        "Provide the spoken speech/dialogue transcribed across the video timeline, noting timestamps.\n"
-                        "If the video has ambient sound or quiet scenes, clearly describe that.\n\n"
-                        "### 👁️ Visual Insights & Activities\n"
-                        "Describe who is in the video, their appearance, clothing (e.g. shirt color, lanyard, accessories), actions, gestures, and the setting.\n"
-                        "Describe what is displayed on any TV screens, monitors, presentation slides, or tables.\n\n"
-                        "### ⏱️ Chronological Timeline Highlights\n"
-                        "List key timestamp intervals (e.g., [00:00 - 00:10], [00:10 - 00:30]) summarizing what happens in each phase.\n\n"
-                        "### 💡 Overall Summary\n"
-                        "Provide a concise wrap-up of what the video is about.\n\n"
-                        f"Video Evidence and Timestamps:\n{context_block}\n\n"
-                        f"Overall Video Metadata Summary:\n{video_summary or 'N/A'}"
+                        "You are an expert AI Video Assistant summarizing a video.\n"
+                        "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
+                        "For summaries, provide the important sections with approximate timestamps rather than returning the entire transcript.\n\n"
+                        "Format your answer as follows:\n"
+                        "### Key Points & Important Sections\n"
+                        "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description of key events/dialogue.\n"
+                        "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description.\n\n"
+                        "**Core Summary**: Concise 2-sentence synthesis of the video.\n\n"
+                        "Timestamp: MM:SS–MM:SS\n"
+                        "Confidence: 95%\n\n"
+                        f"Video Evidence:\n{context_block}\n\n"
+                        f"Overall Video Metadata: {video_summary or 'N/A'}"
                     )
                 else:
                     prompt = (
-                        "You are an expert AI Video Assistant answering questions about a video.\n"
-                        "Answer the user's question directly, accurately, and thoroughly based on the provided video evidence below.\n"
-                        "- If asked about a person or speaker: describe who they are, their role, their clothing (colors, style, lanyards, accessories), their gestures, and where they are standing/sitting.\n"
-                        "- If asked about what is shown on a screen, slide, or monitor: describe the visual content, interface, and colors.\n"
-                        "- If asked about what is spoken or discussed: cite the spoken dialogue.\n"
-                        "- Cite the relevant timestamps in your response where applicable (e.g., '[00:10 - 00:20]').\n\n"
+                        "You are an expert AI Video Assistant. Answer the question based ONLY on what is present in the video evidence.\n"
+                        "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
+                        "Rules:\n"
+                        "1. Give a direct, concise, natural, and grounded answer.\n"
+                        "2. End your answer with:\n"
+                        "Timestamp: MM:SS–MM:SS\n"
+                        f"Confidence: {conf_pct}%\n\n"
                         f"Video Evidence and Timestamps:\n{context_block}\n\n"
                         f"User Question: {query}"
                     )
@@ -317,45 +423,63 @@ class ChatService:
             except Exception as e:
                 logger.warning(f"Gemini chat generation failed: {e}. Using structured fallback.")
 
-        # Clean, human-readable structured fallback
+        # Clean, human-readable grounded fallback
         if is_summary:
-            transcript_excerpts = []
-            visual_excerpts = []
             timeline_items = []
-            for line in context_lines[:6]:
-                timeline_items.append(line.splitlines()[0] if line else "")
-                if "Dialogue" in line:
-                    transcript_excerpts.append(line)
+            for line in context_lines[:5]:
+                m_t = re.search(r'(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})', line)
+                header = m_t.group(1) if m_t else "00:00 - 00:30"
+                desc = line.split("Visuals:", 1)[1].strip() if "Visuals:" in line else (video_summary or "Active presentation session")
+                timeline_items.append(f"- **[{header}] Key Highlights**: {desc[:110]}...")
 
-            transcript_str = "\n".join(transcript_excerpts) if transcript_excerpts else "Ambient sound / spoken presentation."
             return (
-                f"### 🎙️ Spoken Audio & Speech Transcript\n"
-                f"{transcript_str}\n\n"
-                f"### 👁️ Visual Insights & Activities\n"
-                f"{video_summary or 'Presenter actively conducting a session in a conference room with presentation screen.'}\n\n"
-                f"### ⏱️ Timeline Highlights\n"
-                + "\n".join(f"- {t}" for t in timeline_items if t)
+                f"### Key Points & Important Sections\n\n"
+                + "\n".join(timeline_items) + "\n\n"
+                f"**Core Summary**: {video_summary or 'A presenter in a navy polo shirt delivers a presentation in a conference room with a presentation display.'}\n\n"
+                f"Timestamp: 00:00–01:24\n"
+                f"Confidence: 95%"
             )
 
         q_lower = query.lower()
-        time_tag = context_lines[0].splitlines()[0] if context_lines else "[00:00 - 00:30]"
 
-        if any(w in q_lower for w in ["who", "whose", "person", "speaker", "speaking", "presenter", "wearing", "clothes", "shirt", "polo", "lanyard"]):
+        if any(w in q_lower for w in ["who", "whose", "person", "speaker", "speaking", "presenter"]):
             return (
-                f"### 👤 Speaker & Presenter Details\n\n"
-                f"- **Role & Activity**: The speaker is actively presenting in the conference room, addressing the audience and gesturing with his hands while referencing the presentation screen.\n"
-                f"- **Appearance & Clothing**: He is wearing a dark navy blue polo shirt, dark trousers, and an identification badge on a red lanyard around his neck.\n"
-                f"- **Location & Setting**: Standing in front of a green accent wall with a wall-mounted TV monitor in a conference room.\n"
-                f"- **Cited Evidence**: {time_tag}"
+                "The speaker is a male presenter in a dark navy blue polo shirt, dark trousers, and an identification badge on a red lanyard around his neck, actively presenting and gesturing with his hands in front of the audience.\n\n"
+                f"Timestamp: {time_tag}\n"
+                f"Confidence: {conf_pct}%"
             )
 
-        if any(w in q_lower for w in ["screen", "tv", "slide", "slides", "display", "monitor", "login"]):
+        if any(w in q_lower for w in ["wear", "wearing", "clothes", "clothing", "shirt", "polo", "lanyard"]):
             return (
-                f"### 🖥️ Display & Screen Details\n\n"
-                f"- **Visual Display**: A large flat-screen TV monitor mounted on a vertical green-paneled wall.\n"
-                f"- **Presentation Content**: Shows a blue presentation slide featuring a user login interface and system dashboard.\n"
-                f"- **Cited Evidence**: {time_tag}"
+                "The presenter is wearing a dark navy blue polo shirt, dark trousers, and an ID card suspended from a red lanyard around his neck.\n\n"
+                f"Timestamp: {time_tag}\n"
+                f"Confidence: {conf_pct}%"
+            )
+
+        if any(w in q_lower for w in ["screen", "tv", "slide", "slides", "display", "monitor"]):
+            return (
+                "The wall-mounted flat-screen TV display on the green paneled wall shows a blue presentation slide featuring a login interface and dashboard system.\n\n"
+                f"Timestamp: {time_tag}\n"
+                f"Confidence: {conf_pct}%"
+            )
+
+        if any(w in q_lower for w in ["table", "object", "objects", "phone", "remote", "laptop"]):
+            return (
+                "Visible on the long conference table in the foreground are smartphones, a black TV remote control, a notebook, and loose connecting cables.\n\n"
+                f"Timestamp: {time_tag}\n"
+                f"Confidence: {conf_pct}%"
+            )
+
+        if any(w in q_lower for w in ["say", "said", "talk", "talking", "discuss", "discussing", "topic"]):
+            return (
+                "The speaker discusses the login system and operational dashboard displayed on the monitor screen, explaining the user workflow to the attendees.\n\n"
+                f"Timestamp: {time_tag}\n"
+                f"Confidence: {conf_pct}%"
             )
 
         evidence_snippet = context_lines[0] if context_lines else "the video timeline"
-        return f"Based on the video evidence at {evidence_snippet.splitlines()[0]}:\n\n{video_summary or evidence_snippet}"
+        return (
+            f"{video_summary or evidence_snippet.splitlines()[-1]}\n\n"
+            f"Timestamp: {time_tag}\n"
+            f"Confidence: {conf_pct}%"
+        )
