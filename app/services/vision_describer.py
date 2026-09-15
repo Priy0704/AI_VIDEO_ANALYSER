@@ -49,19 +49,31 @@ class VisionDescriber:
                     "4. The sequence of events taking place."
                 )
 
-                model = genai.GenerativeModel(settings.GEMINI_MODEL)
-                response = await asyncio.to_thread(model.generate_content, [prompt] + images)
-                dense_desc = response.text.strip()
-                logger.info(f"Batched Gemini perception succeeded: {dense_desc[:150]}...")
+                candidate_models = []
+                for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                    if m and m not in candidate_models:
+                        candidate_models.append(m)
 
-                # Associate the rich visual perception across the video timeline
-                return [
-                    VisualObservation(
-                        timestamp=s.timestamp,
-                        description=f"At {s.timestamp:.1f}s in video: {dense_desc}"
-                    )
-                    for s in frame_samples
-                ]
+                dense_desc = None
+                for model_name in candidate_models:
+                    try:
+                        model = genai.GenerativeModel(model_name)
+                        response = await asyncio.to_thread(model.generate_content, [prompt] + images)
+                        if response and response.text:
+                            dense_desc = response.text.strip()
+                            break
+                    except Exception as err:
+                        logger.warning(f"Vision model {model_name} failed: {err}")
+
+                if dense_desc:
+                    logger.info(f"Batched Gemini perception succeeded: {dense_desc[:150]}...")
+                    return [
+                        VisualObservation(
+                            timestamp=s.timestamp,
+                            description=f"At {s.timestamp:.1f}s in video: {dense_desc}"
+                        )
+                        for s in frame_samples
+                    ]
             except Exception as e:
                 logger.error(f"Batched Gemini visual perception failed: {e}. Falling back.")
 

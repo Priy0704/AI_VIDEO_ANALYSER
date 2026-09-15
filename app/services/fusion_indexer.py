@@ -130,16 +130,23 @@ class FusionIndexer:
         context = "\n".join(sample_snippets)
 
         if self.api_key and self.api_key != "your_gemini_api_key_here":
-            try:
-                model = genai.GenerativeModel(settings.GEMINI_MODEL)
-                prompt = (
-                    "Provide a comprehensive 2-3 sentence overview summarizing what occurs in this video "
-                    f"based on these chronological segments:\n{context}"
-                )
-                response = await asyncio.to_thread(model.generate_content, prompt)
-                return response.text.strip()
-            except Exception as e:
-                logger.warning(f"Summary generation error: {e}")
+            candidate_models = []
+            for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                if m and m not in candidate_models:
+                    candidate_models.append(m)
+
+            prompt = (
+                "Provide a comprehensive 2-3 sentence overview summarizing what occurs in this video "
+                f"based on these chronological segments:\n{context}"
+            )
+            for model_name in candidate_models:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    response = await asyncio.to_thread(model.generate_content, prompt)
+                    if response and response.text:
+                        return response.text.strip()
+                except Exception as e:
+                    logger.warning(f"Summary generation with {model_name} failed: {e}")
 
         return (
             f"Video contains {len(segments)} indexed temporal segments spanning actions, visual scenes, "

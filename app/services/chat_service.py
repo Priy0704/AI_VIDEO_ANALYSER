@@ -295,13 +295,11 @@ class ChatService:
 
         # 3. Standard queries (Direct, Event, Visual, Audio+Visual, Time-based)
         else:
-            top_score = max((score for _, score in scored_segments), default=0.0)
-            confidence_score = round(top_score, 2)
-            requires_hitl = confidence_score < settings.CONFIDENCE_THRESHOLD
-
-            if requires_hitl:
-                # Content does not exist in video
+            confidence_score = float(scored_segments[0][1]) if scored_segments else 0.0
+            if confidence_score < settings.CONFIDENCE_THRESHOLD:
+                # Content does not exist in video - answer directly without flagging for HITL
                 confidence_score = 0.35
+                requires_hitl = False
                 answer = (
                     "I don't know. This content is not present in the video.\n\n"
                     "Confidence: 35%\n"
@@ -309,6 +307,7 @@ class ChatService:
                 )
                 citations = []
             else:
+                requires_hitl = False
                 for seg, score in scored_segments:
                     time_str = f"{format_seconds_to_timestamp(seg.start_time)} - {format_seconds_to_timestamp(seg.end_time)}"
                     snippet = (seg.visual_description or seg.combined_text or "")[:160].replace("\n", " ")
@@ -385,43 +384,48 @@ class ChatService:
         conf_pct = int(confidence_score * 100)
 
         if self.api_key and self.api_key != "your_gemini_api_key_here":
-            try:
-                genai.configure(api_key=self.api_key, transport="rest")
-                model = genai.GenerativeModel(settings.GEMINI_MODEL)
+            genai.configure(api_key=self.api_key, transport="rest")
+            candidate_models = []
+            for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                if m and m not in candidate_models:
+                    candidate_models.append(m)
 
-                if is_summary:
-                    prompt = (
-                        "You are an expert AI Video Assistant summarizing a video.\n"
-                        "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
-                        "For summaries, provide the important sections with approximate timestamps rather than returning the entire transcript.\n\n"
-                        "Format your answer as follows:\n"
-                        "### Key Points & Important Sections\n"
-                        "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description of key events/dialogue.\n"
-                        "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description.\n\n"
-                        "**Core Summary**: Concise 2-sentence synthesis of the video.\n\n"
-                        "Timestamp: MM:SS–MM:SS\n"
-                        "Confidence: 95%\n\n"
-                        f"Video Evidence:\n{context_block}\n\n"
-                        f"Overall Video Metadata: {video_summary or 'N/A'}"
-                    )
-                else:
-                    prompt = (
-                        "You are an expert AI Video Assistant. Answer the question based ONLY on what is present in the video evidence.\n"
-                        "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
-                        "Rules:\n"
-                        "1. Give a direct, concise, natural, and grounded answer.\n"
-                        "2. End your answer with:\n"
-                        "Timestamp: MM:SS–MM:SS\n"
-                        f"Confidence: {conf_pct}%\n\n"
-                        f"Video Evidence and Timestamps:\n{context_block}\n\n"
-                        f"User Question: {query}"
-                    )
+            if is_summary:
+                prompt = (
+                    "You are an expert AI Video Assistant summarizing a video.\n"
+                    "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
+                    "For summaries, provide the important sections with approximate timestamps rather than returning the entire transcript.\n\n"
+                    "Format your answer as follows:\n"
+                    "### Key Points & Important Sections\n"
+                    "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description of key events/dialogue.\n"
+                    "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description.\n\n"
+                    "**Core Summary**: Concise 2-sentence synthesis of the video.\n\n"
+                    "Timestamp: MM:SS–MM:SS\n"
+                    "Confidence: 95%\n\n"
+                    f"Video Evidence:\n{context_block}\n\n"
+                    f"Overall Video Metadata: {video_summary or 'N/A'}"
+                )
+            else:
+                prompt = (
+                    "You are an expert AI Video Assistant. Answer the question based ONLY on what is present in the video evidence.\n"
+                    "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
+                    "Rules:\n"
+                    "1. Give a direct, concise, natural, and grounded answer.\n"
+                    "2. End your answer with:\n"
+                    "Timestamp: MM:SS–MM:SS\n"
+                    f"Confidence: {conf_pct}%\n\n"
+                    f"Video Evidence and Timestamps:\n{context_block}\n\n"
+                    f"User Question: {query}"
+                )
 
-                response = await asyncio.to_thread(model.generate_content, prompt)
-                if response and response.text:
-                    return response.text.strip()
-            except Exception as e:
-                logger.warning(f"Gemini chat generation failed: {e}. Using structured fallback.")
+            for model_name in candidate_models:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    response = await asyncio.to_thread(model.generate_content, prompt)
+                    if response and response.text:
+                        return response.text.strip()
+                except Exception as e:
+                    logger.warning(f"Model {model_name} failed: {e}. Trying next candidate if available.")
 
         # Clean, human-readable grounded fallback
         if is_summary:

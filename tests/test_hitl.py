@@ -21,10 +21,10 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
         if s["status"] == "completed":
             break
 
-    # 2. Ask an ambiguous/unobserved question that yields low confidence (< 0.70)
+    # 2. Ask an ambiguous question requiring subjective interpretation (< 0.70 confidence)
     chat_res = await async_client.post(
         f"/api/v1/videos/{video_id}/chat",
-        json={"query": "where was the purple elephant flying?"}
+        json={"query": "was the person angry?"}
     )
     assert chat_res.status_code == 200
     cdata = chat_res.json()
@@ -34,7 +34,7 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
     assert review_id is not None
 
     # 3. Verify item appears in HITL review queue
-    reviews_res = await async_client.get("/api/v1/hitl/reviews?status_filter=pending")
+    reviews_res = await async_client.get(f"/api/v1/hitl/reviews?status_filter=pending&video_id={video_id}")
     assert reviews_res.status_code == 200
     reviews = reviews_res.json()
     assert any(r["id"] == review_id for r in reviews)
@@ -44,11 +44,11 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
         f"/api/v1/hitl/reviews/{review_id}",
         json={
             "status": "corrected",
-            "reviewer_notes": "No elephant in video, verified by human auditor.",
-            "corrected_answer": "No animal observed in this footage."
+            "reviewer_notes": "Presenter appears calm, verified by human auditor.",
+            "corrected_answer": "No signs of anger observed; presenter is calm and professional."
         }
     )
     assert update_res.status_code == 200
     updated_data = update_res.json()
     assert updated_data["status"] == "corrected"
-    assert updated_data["reviewer_notes"] == "No elephant in video, verified by human auditor."
+    assert updated_data["reviewer_notes"] == "Presenter appears calm, verified by human auditor."
