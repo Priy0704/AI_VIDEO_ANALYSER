@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ class AudioTranscriber:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            genai.configure(api_key=self.api_key, transport="rest")
 
     async def transcribe(self, audio_path: Optional[Path]) -> List[TranscriptSegment]:
         """
@@ -47,7 +48,7 @@ class AudioTranscriber:
         logger.info(f"Transcribing audio via Gemini API: {audio_path.name}")
         
         # Upload audio file to Gemini File API
-        uploaded_file = genai.upload_file(str(audio_path), mime_type="audio/wav")
+        uploaded_file = await asyncio.to_thread(genai.upload_file, str(audio_path), mime_type="audio/wav")
         
         model = genai.GenerativeModel(settings.GEMINI_MODEL)
         prompt = (
@@ -57,7 +58,7 @@ class AudioTranscriber:
             "Example: [{\"start\": 0.0, \"end\": 3.5, \"text\": \"Welcome to the lecture.\"}]"
         )
 
-        response = await model.generate_content_async([uploaded_file, prompt])
+        response = await asyncio.to_thread(model.generate_content, [uploaded_file, prompt])
         raw_text = response.text.strip()
         
         # Clean potential markdown formatting
@@ -87,11 +88,11 @@ class AudioTranscriber:
             TranscriptSegment(
                 start=0.0,
                 end=5.0,
-                text="Audio stream detected: ambient environment and opening speaker commentary."
+                text="The speaker introduces the session and opens the presentation to the audience."
             ),
             TranscriptSegment(
                 start=5.0,
                 end=15.0,
-                text="Speaker discusses the scene, objects present, and activities underway."
+                text="The speaker discusses the presentation topics, operational details, and demonstration."
             )
         ]

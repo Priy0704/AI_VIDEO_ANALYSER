@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 import hashlib
@@ -18,7 +19,7 @@ class FusionIndexer:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            genai.configure(api_key=self.api_key, transport="rest")
 
     async def fuse_and_index(
         self,
@@ -135,7 +136,7 @@ class FusionIndexer:
                     "Provide a comprehensive 2-3 sentence overview summarizing what occurs in this video "
                     f"based on these chronological segments:\n{context}"
                 )
-                response = await model.generate_content_async(prompt)
+                response = await asyncio.to_thread(model.generate_content, prompt)
                 return response.text.strip()
             except Exception as e:
                 logger.warning(f"Summary generation error: {e}")

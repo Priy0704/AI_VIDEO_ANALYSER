@@ -17,8 +17,7 @@ class Settings(BaseSettings):
 
     # AI Model Provider
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-3.6-flash"
-    EMBEDDING_MODEL: str = "models/gemini-embedding-001"
+    GEMINI_MODEL: str = "gemini-flash-latest"
 
     # Ingestion & Video Pipeline
     MAX_VIDEO_SIZE_MB: int = 500

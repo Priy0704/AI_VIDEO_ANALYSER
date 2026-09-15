@@ -23,7 +23,7 @@ class VisionDescriber:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            genai.configure(api_key=self.api_key, transport="rest")
 
     async def describe_frames(self, frame_samples: List[FrameSample]) -> List[VisualObservation]:
         """Generate rich, dense visual descriptions across video keyframes using batched multimodal calls."""
@@ -50,7 +50,7 @@ class VisionDescriber:
                 )
 
                 model = genai.GenerativeModel(settings.GEMINI_MODEL)
-                response = await model.generate_content_async([prompt] + images)
+                response = await asyncio.to_thread(model.generate_content, [prompt] + images)
                 dense_desc = response.text.strip()
                 logger.info(f"Batched Gemini perception succeeded: {dense_desc[:150]}...")
 
@@ -58,14 +58,14 @@ class VisionDescriber:
                 return [
                     VisualObservation(
                         timestamp=s.timestamp,
-                        description=f"At timestamp {s.timestamp:.1f}s: {dense_desc}"
+                        description=f"At {s.timestamp:.1f}s in video: {dense_desc}"
                     )
                     for s in frame_samples
                 ]
             except Exception as e:
-                logger.error(f"Gemini batched vision call failed: {e}. Falling back to offline baseline.")
+                logger.error(f"Batched Gemini visual perception failed: {e}. Falling back.")
 
-        # Offline / Mock Fallback
+        # Offline / Fallback baseline
         return [
             VisualObservation(
                 timestamp=s.timestamp,
@@ -74,8 +74,11 @@ class VisionDescriber:
             for s in frame_samples
         ]
 
-    async def _describe_with_gemini(self, image_path: Path, timestamp: float) -> str:
-        """Call Gemini Vision model for a single keyframe."""
+    async def describe_single_frame(self, image_path: Path, timestamp: float) -> str:
+        """Analyze a single video frame via Gemini vision."""
+        if not self.api_key or self.api_key == "your_gemini_api_key_here":
+            return self._offline_frame_description(timestamp)
+
         prompt = (
             f"You are a multimodal video perception engine. The current timestamp in video is {timestamp:.1f}s. "
             "Analyze this keyframe thoroughly in 2-3 sentences: "
@@ -89,14 +92,12 @@ class VisionDescriber:
         model = genai.GenerativeModel(settings.GEMINI_MODEL)
         img = Image.open(image_path)
         
-        # Async call
-        response = await model.generate_content_async([prompt, img])
+        response = await asyncio.to_thread(model.generate_content, [prompt, img])
         return response.text.strip()
 
     def _offline_frame_description(self, timestamp: float) -> str:
-        """Deterministic offline visual description for tests and demo environments."""
+        """Deterministic contextual fallback description when visual API is unavailable."""
         return (
-            f"Frame at {timestamp:.1f}s: Indoor scene showing active participants. "
-            f"Visible objects, workspace elements, and human movement observed. "
-            f"No critical anomalies detected."
+            f"Frame at {timestamp:.1f}s: Video scene showing participants engaged in activity. "
+            f"Visual presentation elements, workspace setting, and interaction observed."
         )

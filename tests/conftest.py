@@ -23,6 +23,9 @@ def setup_test_environment():
     """Ensure data directories exist and run tests offline to preserve API quota."""
     settings.init_storage()
     settings.GEMINI_API_KEY = None
+    task_queue.audio_transcriber.api_key = None
+    task_queue.vision_describer.api_key = None
+    task_queue.fusion_indexer.api_key = None
 
 
 @pytest.fixture
