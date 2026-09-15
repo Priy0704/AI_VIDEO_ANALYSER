@@ -1,0 +1,54 @@
+import pytest
+import asyncio
+from pathlib import Path
+from httpx import AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample_mp4: Path):
+    """Test confidence-driven HITL auto-flagging and human verification."""
+    # 1. Ingest video
+    with open(sample_mp4, "rb") as f:
+        res = await async_client.post(
+            "/api/v1/videos/upload",
+            files={"file": ("hitl_test.mp4", f, "video/mp4")}
+        )
+    video_id = res.json()["video_id"]
+
+    for _ in range(15):
+        await asyncio.sleep(1)
+        s = (await async_client.get(f"/api/v1/videos/{video_id}/status")).json()
+        if s["status"] == "completed":
+            break
+
+    # 2. Ask an ambiguous/unobserved question that yields low confidence (< 0.70)
+    chat_res = await async_client.post(
+        f"/api/v1/videos/{video_id}/chat",
+        json={"query": "where was the purple elephant flying?"}
+    )
+    assert chat_res.status_code == 200
+    cdata = chat_res.json()
+    assert cdata["confidence_score"] < 0.70
+    assert cdata["requires_hitl"] is True
+    review_id = cdata["hitl_review_id"]
+    assert review_id is not None
+
+    # 3. Verify item appears in HITL review queue
+    reviews_res = await async_client.get("/api/v1/hitl/reviews?status_filter=pending")
+    assert reviews_res.status_code == 200
+    reviews = reviews_res.json()
+    assert any(r["id"] == review_id for r in reviews)
+
+    # 4. Human reviewer submits correction
+    update_res = await async_client.post(
+        f"/api/v1/hitl/reviews/{review_id}",
+        json={
+            "status": "corrected",
+            "reviewer_notes": "No elephant in video, verified by human auditor.",
+            "corrected_answer": "No animal observed in this footage."
+        }
+    )
+    assert update_res.status_code == 200
+    updated_data = update_res.json()
+    assert updated_data["status"] == "corrected"
+    assert updated_data["reviewer_notes"] == "No elephant in video, verified by human auditor."
