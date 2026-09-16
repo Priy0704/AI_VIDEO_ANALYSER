@@ -244,21 +244,45 @@ async function selectVideo(videoId) {
                 </details>
             `;
         } else {
-            // No audio speech transcript available - display About Video visual summary
+            // No audio speech transcript available (silent video / image progression)
+            // Describe images with timestamps in story / event progression
+            const visualSegments = segments.filter(
+                s => s.visual_description && s.visual_description.trim().length > 0
+            );
+
+            let visualEventsHtml = "";
+            if (visualSegments.length > 0) {
+                visualEventsHtml = visualSegments.map((s, idx) => {
+                    const desc = s.visual_description.replace(/^At\s+\d+(\.\d+)?s\s+in\s+video:\s*/i, "");
+                    return `
+                        <div class="transcript-row">
+                            <button class="transcript-time" onclick="seekVideo(${s.start_time})" title="Jump to ${formatSeconds(s.start_time)}">
+                                <i class="fa-solid fa-film" style="font-size: 0.55rem;"></i> ${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}
+                            </button>
+                            <span class="transcript-text"><strong>Scene ${idx + 1}:</strong> ${escapeHtml(desc)}</span>
+                        </div>
+                    `;
+                }).join("");
+            } else {
+                visualEventsHtml = `<p style="font-size: 0.8rem; color: var(--text-muted);">Visual keyframes analyzed.</p>`;
+            }
+
             summaryPanel.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
-                    <div style="font-weight: 600; color: #f8fafc; display: flex; align-items: center; gap: 0.4rem;">
-                        <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i>
-                        <span>About Video (Visual Overview)</span>
+                    <div style="font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 0.4rem;">
+                        <i class="fa-solid fa-film"></i>
+                        <span>Visual Story & Events (Image Progression)</span>
                     </div>
-                    <span class="badge badge-queued" style="font-size: 0.7rem;">No Spoken Audio</span>
+                    <span class="badge badge-queued" style="font-size: 0.7rem;">
+                        <i class="fa-solid fa-video-slash"></i> Silent Video (No Audio)
+                    </span>
                 </div>
-                <p style="color: #cbd5e1; line-height: 1.45; font-size: 0.84rem; margin-top: 0.35rem;">
-                    ${escapeHtml(details.summary || "Summary processing...")}
-                </p>
-                <span style="color: var(--primary); font-size: 0.72rem; margin-top: 0.4rem; display: block;">
-                    ${details.segments_count} time-indexed multimodal segments
-                </span>
+                <div class="transcript-list">
+                    ${visualEventsHtml}
+                </div>
+                <div style="margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.4rem; font-size: 0.8rem; color: var(--text-muted);">
+                    <strong style="color: var(--text-main);">Story Overview:</strong> ${escapeHtml(details.summary || "Visual event progression.")}
+                </div>
             `;
         }
 

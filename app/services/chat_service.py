@@ -403,14 +403,14 @@ class ChatService:
                     "You are an expert AI Video Assistant summarizing a video.\n"
                     "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
                     "Rules for Video Summary:\n"
-                    "1. If spoken dialogue / audio-to-text transcript is available in the video evidence, output the Transcript (Audio to Text) with timestamps first.\n"
-                    "2. Follow with the Core Summary / About Video.\n"
-                    "3. If no spoken audio transcript is present, provide the visual About Video overview directly.\n\n"
-                    "Format your answer as follows:\n"
-                    "### Video Transcript (Audio to Text)\n"
-                    "- **[MM:SS - MM:SS]**: Spoken dialogue/speech...\n\n"
-                    "### About Video (Visual Overview)\n"
-                    "Concise synthesis of video progression, setting, and participants.\n\n"
+                    "1. If spoken dialogue / audio-to-text transcript is available in the video evidence, output the Transcript (Audio to Text) with timestamps first, followed by the Core Summary.\n"
+                    "2. If the video has NO spoken audio (e.g. silent video, image progression, or no dialogue), describe the visual events with timestamps in chronological order like a visual story or event progression:\n"
+                    "   Format:\n"
+                    "   ### Visual Story & Events (Image Progression)\n"
+                    "   - **[MM:SS - MM:SS] Scene 1**: Description of what happens visually in this image/scene.\n"
+                    "   - **[MM:SS - MM:SS] Scene 2**: Description of what happens next.\n\n"
+                    "   ### Story Overview\n"
+                    "   Narrative synthesis of the visual progression.\n\n"
                     "Timestamp: MM:SS–MM:SS\n"
                     "Confidence: 95%\n\n"
                     f"Video Evidence:\n{context_block}\n\n"
@@ -464,9 +464,21 @@ class ChatService:
                     f"Confidence: 95%"
                 )
             else:
+                # Video has no audio speech - describe by images with timestamp in story/event format
+                event_items = []
+                for idx, line in enumerate(context_lines[:6], 1):
+                    m_t = re.search(r'(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})', line)
+                    header = m_t.group(1) if m_t else "00:00 - 00:30"
+                    visual = line.split("Visuals:", 1)[1].strip() if "Visuals:" in line else (video_summary or "Visual progression.")
+                    short_desc = visual.split(". ")[0] if ". " in visual else visual[:120]
+                    event_items.append(f"- **[{header}] Scene {idx}**: {short_desc}.")
+
+                events_block = "\n".join(event_items) if event_items else "- Visual progression across keyframes."
                 return (
-                    f"### About Video (Visual Overview)\n\n"
-                    f"{video_summary or 'In a conference room, a presenter dressed in a navy blue polo shirt delivers a presentation.'}\n\n"
+                    f"### Visual Story & Events (Image Progression)\n\n"
+                    + events_block + "\n\n"
+                    f"### Story Overview\n"
+                    f"{video_summary or 'The video displays a sequence of visual events and scene actions without spoken dialogue.'}\n\n"
                     f"Timestamp: 00:00–01:24\n"
                     f"Confidence: 95%"
                 )
