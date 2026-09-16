@@ -371,6 +371,7 @@ async function selectVideo(videoId) {
             currentActiveTab = 'visuals';
         }
 
+        renderTabContent();
         switchTab(currentActiveTab);
 
         // Reset chat with contextual greeting
