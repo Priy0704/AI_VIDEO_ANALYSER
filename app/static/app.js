@@ -62,6 +62,88 @@ async function handleMultipleFiles(files) {
     }
 }
 
+function switchUploadMode(mode) {
+    const btnFile = document.getElementById("btnModeFile");
+    const btnUrl = document.getElementById("btnModeUrl");
+    const dropzone = document.getElementById("dropzone");
+    const paneUrl = document.getElementById("paneUrl");
+
+    if (mode === "url") {
+        btnFile.classList.remove("active");
+        btnUrl.classList.add("active");
+        dropzone.style.display = "none";
+        paneUrl.style.display = "flex";
+        setTimeout(() => document.getElementById("videoUrlInput").focus(), 50);
+    } else {
+        btnUrl.classList.remove("active");
+        btnFile.classList.add("active");
+        paneUrl.style.display = "none";
+        dropzone.style.display = "block";
+    }
+}
+
+function handleUrlKeyPress(e) {
+    if (e.key === "Enter") {
+        importFromUrl();
+    }
+}
+
+async function importFromUrl() {
+    const input = document.getElementById("videoUrlInput");
+    const btn = document.getElementById("btnFetchUrl");
+    const url = (input.value || "").trim();
+
+    if (!url) {
+        alert("Please enter a valid YouTube or video URL.");
+        input.focus();
+        return;
+    }
+
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        alert("URL must begin with http:// or https://");
+        input.focus();
+        return;
+    }
+
+    const progressBox = document.getElementById("progressBox");
+    const stageLabel = document.getElementById("stageLabel");
+    const percentLabel = document.getElementById("percentLabel");
+    const progressBar = document.getElementById("progressBar");
+
+    progressBox.style.display = "block";
+    stageLabel.innerText = "Connecting to video stream...";
+    percentLabel.innerText = "...";
+    progressBar.style.width = "15%";
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Fetching...</span>`;
+
+    try {
+        const res = await fetch("/api/v1/videos/from-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            alert(`Fetch failed: ${err.detail || "Unable to download video from URL."}`);
+            progressBox.style.display = "none";
+            return;
+        }
+
+        const data = await res.json();
+        input.value = "";
+        currentVideoId = data.video_id;
+        pollVideoStatus(currentVideoId);
+    } catch (e) {
+        alert(`Network error fetching video: ${e.message}`);
+        progressBox.style.display = "none";
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-bolt"></i> <span>Fetch & Analyze</span>`;
+    }
+}
+
 async function uploadVideoFile(file) {
     const formData = new FormData();
     formData.append("file", file);

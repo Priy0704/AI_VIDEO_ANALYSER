@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 from typing import List
-from fastapi import APIRouter, UploadFile, File, Depends, status, Query, Request
+from fastapi import APIRouter, UploadFile, File, Depends, status, Query, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import Video, VideoStatus, VideoSegment
 from app.schemas.video import (
+    VideoUrlRequest,
     VideoUploadResponse,
     VideoStatusResponse,
     VideoDetailResponse,
@@ -21,6 +22,7 @@ from app.core.exceptions import (
     FileTooLargeError
 )
 from app.services.task_queue import task_queue
+from app.services.url_downloader import UrlDownloader
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
@@ -80,6 +82,62 @@ async def upload_video(
         filename=video.filename,
         status=video.status,
         message="Video accepted and queued for multimodal processing."
+    )
+
+
+@router.post(
+    "/from-url",
+    response_model=VideoUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Download and ingest a video from YouTube or web URL"
+)
+async def ingest_video_from_url(
+    payload: VideoUrlRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Downloads a video from YouTube or a supported web URL using yt-dlp,
+    saves the MP4 stream, creates a database record, and queues multimodal processing.
+    """
+    downloader = UrlDownloader(download_dir=settings.UPLOAD_DIR)
+    try:
+        download_info = await downloader.download_video(payload.url)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch video: {str(e)}"
+        )
+
+    file_path = Path(download_info["file_path"])
+    total_bytes = int(download_info["file_size_mb"] * 1024 * 1024)
+
+    # Create video record in PostgreSQL
+    video = Video(
+        filename=download_info["filename"],
+        file_path=str(file_path.resolve()),
+        file_size_bytes=total_bytes,
+        duration_seconds=download_info.get("duration_seconds"),
+        status=VideoStatus.QUEUED,
+        progress_pct=0,
+        current_stage="Queued"
+    )
+    db.add(video)
+    await db.commit()
+    await db.refresh(video)
+
+    # Enqueue background multimodal processing
+    task_queue.enqueue_video_processing(video.id, file_path)
+
+    return VideoUploadResponse(
+        video_id=video.id,
+        filename=video.filename,
+        status=video.status,
+        message=f"YouTube video '{download_info['title']}' fetched and queued for processing."
     )
 
 

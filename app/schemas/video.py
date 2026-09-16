@@ -4,6 +4,10 @@ from typing import Optional, List
 from app.db.models import VideoStatus
 
 
+class VideoUrlRequest(BaseModel):
+    url: str = Field(..., min_length=5, max_length=2048, description="YouTube or web video URL")
+
+
 class VideoUploadResponse(BaseModel):
     video_id: str
     filename: str
