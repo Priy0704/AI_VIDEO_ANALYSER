@@ -231,12 +231,14 @@ class ChatService:
         scored_segments: List[Tuple[VideoSegment, float]] = []
         q_lower = query.lower()
         person_words = {"who", "whose", "person", "someone", "speaker", "speaking", "presenter", "presenting", "man", "woman", "guy", "people", "host", "trainer"}
+        name_words = {"name", "names", "mentor", "mentors", "faculty", "member", "members", "singer", "singers", "artist", "artists", "title", "titles", "song", "songs", "track", "tracks", "author", "authors", "credit", "credits", "attendee", "attendees", "participant", "participants", "list", "listed", "written", "text", "slide", "slides"}
         clothing_words = {"wear", "wearing", "clothes", "clothing", "shirt", "polo", "t-shirt", "suit", "jacket", "pants", "lanyard", "badge", "glasses"}
         display_words = {"screen", "tv", "monitor", "slide", "slides", "display", "presentation", "ui", "login", "dashboard", "board", "projector", "table", "laptop", "phone", "object", "objects"}
         speech_words = {"say", "said", "speak", "speaking", "talk", "talking", "discuss", "discussing", "topic", "words", "speech", "transcript", "dialogue", "hear", "voice", "audio"}
         action_words = {"leave", "left", "enter", "enters", "entering", "room", "gesture", "gesturing", "point", "pointing", "stand", "standing", "walk", "walking"}
 
         has_person_query = any(w in q_lower for w in person_words)
+        has_name_query = any(w in q_lower for w in name_words)
         has_clothing_query = any(w in q_lower for w in clothing_words)
         has_display_query = any(w in q_lower for w in display_words)
         has_speech_query = any(w in q_lower for w in speech_words)
@@ -287,6 +289,10 @@ class ChatService:
                 relevance = max(relevance, min(0.94, 0.86 + (0.02 * all_matches)))
             else:
                 # Concept matching for semantic intent when verbatim words differ
+                if has_name_query and any(w in seg_vis for w in ["on-screen text", "names:", "faculty", "mentor", "song", "title", "artist", "credits"]):
+                    relevance = max(relevance, 0.96)
+                elif has_name_query and any(w in seg_text for w in ["name", "faculty", "mentor", "member", "slide", "presenter", "speaker"]):
+                    relevance = max(relevance, 0.92)
                 if has_person_query and any(w in seg_text for w in ["man", "woman", "person", "speaker", "presenter", "standing", "speaking", "wearing", "addresses"]):
                     relevance = max(relevance, 0.92)
                 if has_clothing_query and any(w in seg_text for w in ["polo", "shirt", "pants", "lanyard", "badge", "suit", "wearing", "dark", "blue"]):
@@ -442,11 +448,18 @@ class ChatService:
                     f"Visuals & Scene: {seg.visual_description or 'No visual details'}"
                 )
 
-            # Extract exact visual frame from video file if present on disk
+            # Extract visual frame from video file if present on disk
             frame_image = None
             if video.file_path and Path(video.file_path).exists():
                 exact_t = self.parse_exact_timestamp(query)
-                frame_t = exact_t if exact_t is not None else (scored_segments[0][0].start_time + 1.0)
+                if exact_t is not None:
+                    frame_t = exact_t
+                elif scored_segments:
+                    # Pick middle timestamp of the highest scoring segment
+                    best_seg = scored_segments[0][0]
+                    frame_t = (best_seg.start_time + best_seg.end_time) / 2.0
+                else:
+                    frame_t = 1.0
                 frame_image = self._extract_frame_at_timestamp(Path(video.file_path), frame_t)
 
             answer = await self._generate_grounded_answer(
@@ -566,6 +579,9 @@ class ChatService:
                     "   Supporting Evidence:\n   <Brief visual or spoken dialogue reference>\n\n"
                     "4. Multilingual Rule:\n"
                     "   Answer in the same language as the user's question. Natively support English, Hindi (हिंदी), Marathi (मराठी), and mixed languages, while preserving the required headers (Answer, Timestamp, Confidence, Supporting Evidence).\n\n"
+                    "5. Names and Visible Text Rule:\n"
+                    "   If the question asks for names, faculty members, mentors, attendees, speakers, presenters, song titles, or artists visible in the video or slides:\n"
+                    "   List and quote the exact names found in the on-screen text, slide contents, or visual keyframe evidence verbatim. Never omit names or say 'a list of names' if specific names are present in the evidence.\n\n"
                     f"Video Evidence and Timestamps:\n{context_block}\n\n"
                     f"Overall Video Metadata: {video_summary or 'N/A'}\n\n"
                     f"User Question: {query}"

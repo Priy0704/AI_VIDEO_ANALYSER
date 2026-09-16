@@ -181,6 +181,7 @@
             overflow: hidden;
             box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
             position: relative;
+            min-height: 0;
         }
 
         .card-title {
@@ -746,24 +747,77 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
+            height: 100%;
+        }
+
+        .chat-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-left: auto;
+        }
+
+        .btn-chat-action {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.15s ease;
+        }
+
+        .btn-chat-action:hover {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--primary);
+            border-color: rgba(56, 189, 248, 0.35);
         }
 
         .chat-messages {
-            flex: 1;
-            overflow-y: auto;
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: scroll !important;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
-            padding-right: 0.3rem;
+            padding-right: 0.35rem;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(56, 189, 248, 0.35) rgba(15, 23, 42, 0.4);
+            overscroll-behavior: contain;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.3);
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
         }
 
         .message {
-            max-width: 88%;
-            padding: 0.75rem 1rem;
+            max-width: 92%;
+            padding: 0.75rem 0.95rem;
             border-radius: var(--radius-md);
             font-size: 0.83rem;
             line-height: 1.45;
             animation: fadeIn 0.2s ease-in-out;
+            word-break: break-word;
         }
 
         @keyframes fadeIn {
@@ -776,6 +830,9 @@
             background: rgba(30, 41, 59, 0.65);
             border: 1px solid var(--border);
             color: #f1f5f9;
+            width: 100%;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
         }
 
         .message.user {
@@ -784,6 +841,68 @@
             color: white;
             border-bottom-right-radius: 2px;
             font-weight: 500;
+        }
+
+        .message-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.45rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .btn-toggle-answer {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-weight: 500;
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.15s ease;
+        }
+
+        .btn-toggle-answer:hover {
+            background: rgba(56, 189, 248, 0.2);
+            color: var(--primary);
+            border-color: rgba(56, 189, 248, 0.4);
+        }
+
+        .message.assistant.collapsed .message-answer-body {
+            display: none;
+        }
+
+        .message.assistant.collapsed .message-meta {
+            display: none;
+        }
+
+        .message-collapsed-preview {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.4rem 0.6rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .message.assistant.collapsed .message-collapsed-preview {
+            display: flex;
+        }
+
+        .message-collapsed-preview:hover {
+            color: var(--primary);
+            background: rgba(56, 189, 248, 0.08);
         }
 
         .message-meta {
@@ -1078,9 +1197,19 @@
 
         <!-- RIGHT: Grounded Chat & HITL -->
         <div class="card chat-column">
-            <div class="card-title">
-                <i class="fa-solid fa-robot"></i>
-                <span>Grounded AI Assistant</span>
+            <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.65rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-robot"></i>
+                    <span>Grounded AI Assistant</span>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="btn-chat-action" id="btnToggleAllAnswers" onclick="toggleAllAnswers()" title="Collapse all answers to save space">
+                        <i class="fa-solid fa-compress"></i> <span>Hide All</span>
+                    </button>
+                    <button class="btn-chat-action" onclick="clearChatMessages()" title="Clear chat messages">
+                        <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
+                    </button>
+                </div>
             </div>
 
             <div class="chat-messages" id="chatMessages">

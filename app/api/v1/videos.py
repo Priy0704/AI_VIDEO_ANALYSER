@@ -52,14 +52,19 @@ async def upload_video(
     saved_path = settings.UPLOAD_DIR / saved_filename
 
     total_bytes = 0
+    too_large = False
     with open(saved_path, "wb") as buffer:
         while chunk := await file.read(1024 * 1024):  # 1MB chunks
             total_bytes += len(chunk)
             size_mb = total_bytes / (1024 * 1024)
             if size_mb > settings.MAX_VIDEO_SIZE_MB:
-                saved_path.unlink(missing_ok=True)
-                raise FileTooLargeError(size_mb, settings.MAX_VIDEO_SIZE_MB)
+                too_large = True
+                break
             buffer.write(chunk)
+
+    if too_large:
+        saved_path.unlink(missing_ok=True)
+        raise FileTooLargeError(total_bytes / (1024 * 1024), settings.MAX_VIDEO_SIZE_MB)
 
     # Create video record in PostgreSQL
     video = Video(

@@ -465,6 +465,13 @@ function renderTabContent() {
                 
                 let headline = "";
                 let details = "";
+                let onScreenText = "";
+
+                const textMatch = raw.match(/On-Screen Text & Names:\s*([\s\S]+)$/i);
+                if (textMatch) {
+                    onScreenText = textMatch[1].trim();
+                    raw = raw.replace(/On-Screen Text & Names:\s*[\s\S]+$/i, "").trim();
+                }
                 
                 const headMatch = raw.match(/^(?:Headline:\s*)?(.+?)(?:\n\s*(?:Details:\s*)?([\s\S]+))?$/i);
                 if (headMatch && headMatch[2]) {
@@ -487,6 +494,18 @@ function renderTabContent() {
                 headline = headline.replace(/^Headline:\s*/i, "").trim();
                 details = details.replace(/^Details:\s*/i, "").trim();
 
+                let onScreenBadge = "";
+                if (onScreenText && onScreenText.toLowerCase() !== "none") {
+                    onScreenBadge = `
+                        <div style="margin-top: 0.6rem; padding: 0.5rem 0.65rem; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 4px;">
+                            <div style="font-size: 0.68rem; font-weight: 600; color: var(--primary); text-transform: uppercase; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.35rem;">
+                                <i class="fa-solid fa-font"></i> Visible On-Screen Text & Names
+                            </div>
+                            <p style="margin: 0; color: #f1f5f9; font-size: 0.8rem; line-height: 1.45; white-space: pre-wrap;">${escapeHtml(onScreenText)}</p>
+                        </div>
+                    `;
+                }
+
                 return `
                     <div class="scene-card" id="scene-card-${idx}" onclick="toggleSceneAccordion(${idx}, ${s.start_time})">
                         <div class="scene-header">
@@ -503,6 +522,7 @@ function renderTabContent() {
                                 <i class="fa-solid fa-eye"></i> Visual Context & Setting
                             </div>
                             <p style="margin: 0; color: #cbd5e1; font-size: 0.81rem; line-height: 1.5;">${escapeHtml(details || headline)}</p>
+                            ${onScreenBadge}
                         </div>
                     </div>
                 `;
@@ -689,9 +709,28 @@ async function sendChatMessage() {
             `).join("");
         }
 
+        const msgId = `asst-msg-${Date.now()}`;
+        const firstLine = data.answer.split('\n')[0].replace(/^Answer:\s*/i, '').trim();
+        const previewSnippet = firstLine.length > 75 ? firstLine.substring(0, 72) + "..." : firstLine;
+
         chatMessages.innerHTML += `
-            <div class="message assistant">
-                <div style="white-space: pre-wrap;">${escapeHtml(data.answer)}</div>
+            <div class="message assistant" id="${msgId}">
+                <div class="message-top-bar">
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                        <i class="fa-solid fa-robot" style="color: var(--primary);"></i>
+                        <span style="font-weight: 600; color: #f1f5f9;">AI Assistant</span>
+                    </div>
+                    <button class="btn-toggle-answer" onclick="toggleMessageCollapse(this)" title="Hide or show answer">
+                        <i class="fa-solid fa-chevron-up"></i> <span>Hide</span>
+                    </button>
+                </div>
+                <div class="message-collapsed-preview" onclick="toggleMessageCollapse(this)" title="Click to view full answer">
+                    <span>${escapeHtml(previewSnippet || "Answer hidden (click to expand)")}</span>
+                    <i class="fa-solid fa-chevron-down" style="font-size: 0.65rem;"></i>
+                </div>
+                <div class="message-answer-body">
+                    <div style="white-space: pre-wrap;">${escapeHtml(data.answer)}</div>
+                </div>
                 <div class="message-meta">
                     ${citationsHtml}
                     <span style="color: ${confColor}; font-weight: 600; font-size: 0.72rem; margin-left: auto;">
@@ -700,7 +739,9 @@ async function sendChatMessage() {
                 </div>
             </div>
         `;
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 50);
 
         if (data.requires_hitl) {
             loadHITLReviews();
@@ -717,6 +758,59 @@ async function sendChatMessage() {
             </div>
         `;
     }
+}
+
+function toggleMessageCollapse(elem) {
+    const card = elem.closest(".message.assistant");
+    if (!card) return;
+    card.classList.toggle("collapsed");
+    const btn = card.querySelector(".btn-toggle-answer");
+    if (btn) {
+        if (card.classList.contains("collapsed")) {
+            btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> <span>Show</span>`;
+        } else {
+            btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> <span>Hide</span>`;
+        }
+    }
+}
+
+let allAnswersCollapsed = false;
+function toggleAllAnswers() {
+    const messages = document.querySelectorAll(".message.assistant");
+    const toggleBtn = document.getElementById("btnToggleAllAnswers");
+    
+    allAnswersCollapsed = !allAnswersCollapsed;
+    messages.forEach(card => {
+        if (allAnswersCollapsed) {
+            card.classList.add("collapsed");
+            const btn = card.querySelector(".btn-toggle-answer");
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> <span>Show</span>`;
+        } else {
+            card.classList.remove("collapsed");
+            const btn = card.querySelector(".btn-toggle-answer");
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> <span>Hide</span>`;
+        }
+    });
+
+    if (toggleBtn) {
+        if (allAnswersCollapsed) {
+            toggleBtn.innerHTML = `<i class="fa-solid fa-expand"></i> <span>Show All</span>`;
+        } else {
+            toggleBtn.innerHTML = `<i class="fa-solid fa-compress"></i> <span>Hide All</span>`;
+        }
+    }
+}
+
+function clearChatMessages() {
+    const chatMessages = document.getElementById("chatMessages");
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message assistant">
+                Hello! Ask any question about the selected video: actions, spoken dialogue, people, visible items, or timestamps (e.g. <i>"What is being explained?"</i> or <i>"What happened around 0:10?"</i>).
+            </div>
+        `;
+    }
+    currentSessionId = null;
 }
 
 async function loadHITLReviews() {
