@@ -1,9 +1,14 @@
 import asyncio
 import logging
 import re
+import io
+import subprocess
+from pathlib import Path
 from typing import List, Tuple, Optional
 from datetime import datetime
 import numpy as np
+from PIL import Image
+import imageio_ffmpeg
 import google.generativeai as genai
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -33,6 +38,55 @@ class ChatService:
         if self.api_key:
             genai.configure(api_key=self.api_key, transport="rest")
 
+    def parse_exact_timestamp(self, query: str) -> Optional[float]:
+        """Extract exact single timestamp in seconds (e.g. '9:44', '9 : 44', 'at 09:44')."""
+        q_lower = query.lower()
+        # "MM:SS" with optional spaces around colon, e.g. "9:44", "09:44", "9 : 44"
+        m_colon = re.search(r'\b(\d{1,2})\s*:\s*(\d{2})\b', q_lower)
+        if m_colon:
+            return float(int(m_colon.group(1)) * 60 + int(m_colon.group(2)))
+
+        # "X min Y sec" or "X minutes Y seconds"
+        m_min_sec = re.search(r'(\d+)\s*(?:minute|minutes|min)\s*(\d+)?\s*(?:second|seconds|sec)?', q_lower)
+        if m_min_sec:
+            m = int(m_min_sec.group(1))
+            s = int(m_min_sec.group(2)) if m_min_sec.group(2) else 0
+            return float(m * 60 + s)
+
+        # "at X minutes" or "around X minutes"
+        m_min = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:minute|minutes|min)\b', q_lower)
+        if m_min:
+            return float(int(m_min.group(1)) * 60)
+
+        # "at X seconds"
+        m_sec = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:second|seconds|sec)\b', q_lower)
+        if m_sec:
+            return float(m_sec.group(1))
+
+        return None
+
+    def _extract_frame_at_timestamp(self, video_path: Path, timestamp_sec: float) -> Optional[Image.Image]:
+        """Extract exact visual keyframe at timestamp_sec using FFmpeg pipe."""
+        if not video_path.exists():
+            return None
+        try:
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            cmd = [
+                ffmpeg_exe,
+                "-ss", str(max(0.0, timestamp_sec)),
+                "-i", str(video_path),
+                "-vframes", "1",
+                "-f", "image2pipe",
+                "-vcodec", "png",
+                "-"
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=6)
+            if res.returncode == 0 and res.stdout:
+                return Image.open(io.BytesIO(res.stdout)).convert("RGB")
+        except Exception as e:
+            logger.warning(f"Failed to extract frame at {timestamp_sec}s from {video_path}: {e}")
+        return None
+
     def parse_temporal_scope(self, query: str, duration: Optional[float] = None) -> Tuple[Optional[float], Optional[float]]:
         """Extract explicit time range (e.g. 'between 2:00 and 4:00', 'first half', 'second half', 'at 2:15', 'around 5 minutes')."""
         q_lower = query.lower()
@@ -50,8 +104,8 @@ class ChatService:
         if "second half" in q_lower:
             return vid_dur / 2.0, vid_dur
 
-        # 3. "between X:XX and Y:YY" or "from X:XX to Y:YY"
-        m_range = re.search(r'(?:between|from)\s*(\d{1,2}):(\d{2})\s*(?:and|to)\s*(\d{1,2}):(\d{2})', q_lower)
+        # 3. "between X:XX and Y:YY" or "from X:XX to Y:YY" (handles optional whitespace around colon)
+        m_range = re.search(r'(?:between|from)\s*(\d{1,2})\s*:\s*(\d{2})\s*(?:and|to)\s*(\d{1,2})\s*:\s*(\d{2})', q_lower)
         if m_range:
             t1 = float(int(m_range.group(1)) * 60 + int(m_range.group(2)))
             t2 = float(int(m_range.group(3)) * 60 + int(m_range.group(4)))
@@ -64,20 +118,20 @@ class ChatService:
             t2 = float(int(m_min_range.group(2)) * 60)
             return min(t1, t2), max(t1, t2)
 
-        # 5. "at X:XX" or single MM:SS
-        m_single = re.search(r'\b(\d{1,2}):(\d{2})\b', q_lower)
+        # 5. "at X:XX" or single MM:SS (handles optional whitespace around colon)
+        m_single = re.search(r'\b(\d{1,2})\s*:\s*(\d{2})\b', q_lower)
         if m_single:
             t = float(int(m_single.group(1)) * 60 + int(m_single.group(2)))
             return max(0.0, t - 15.0), t + 15.0
 
         # 6. "around X minutes" or "at X minutes"
-        m_min = re.search(r'(?:around|at|about)\s*(\d+)\s*(?:minute|minutes|min)', q_lower)
+        m_min = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:minute|minutes|min)', q_lower)
         if m_min:
             t = float(int(m_min.group(1)) * 60)
             return max(0.0, t - 20.0), t + 20.0
 
         # 7. "around X seconds" or "at X seconds"
-        m_sec = re.search(r'(?:around|at|about)\s*(\d+)\s*(?:second|seconds|sec)', q_lower)
+        m_sec = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:second|seconds|sec)', q_lower)
         if m_sec:
             t = float(m_sec.group(1))
             return max(0.0, t - 10.0), t + 10.0
@@ -116,9 +170,33 @@ class ChatService:
         top_k: int = 4
     ) -> List[Tuple[VideoSegment, float]]:
         """Retrieve most relevant video segments using hybrid temporal + vector cosine similarity."""
-        t_start, t_end = self.parse_temporal_scope(query, video_duration)
+        # 1. Exact single timestamp match (e.g. "at 9:44", "which song played in 9:44")
+        exact_time = self.parse_exact_timestamp(query)
+        if exact_time is not None:
+            if video_duration and exact_time > video_duration + 5.0:
+                return []
+            stmt = select(VideoSegment).where(
+                and_(
+                    VideoSegment.video_id == video_id,
+                    VideoSegment.start_time <= exact_time,
+                    VideoSegment.end_time >= exact_time
+                )
+            )
+            result = await db.execute(stmt)
+            matched = result.scalars().all()
+            if matched:
+                return [(matched[0], 0.98)]
+            # If between segment boundaries, retrieve closest segment
+            stmt_all = select(VideoSegment).where(VideoSegment.video_id == video_id).order_by(VideoSegment.start_time)
+            result_all = await db.execute(stmt_all)
+            all_segs = result_all.scalars().all()
+            if all_segs:
+                closest = min(all_segs, key=lambda s: min(abs(s.start_time - exact_time), abs(s.end_time - exact_time)))
+                return [(closest, 0.95)]
+            return []
 
-        # If user explicitly specified a time range or timestamp
+        # 2. Broader time range matching (e.g. "first half", "between 3:00 and 5:00")
+        t_start, t_end = self.parse_temporal_scope(query, video_duration)
         if t_start is not None and t_end is not None:
             # If requested time is entirely beyond the video duration, no content exists
             if video_duration and t_start >= video_duration:
@@ -363,8 +441,17 @@ class ChatService:
                     f"Dialogue / Speech: {seg.transcript_text or 'No spoken dialogue'}\n"
                     f"Visuals & Scene: {seg.visual_description or 'No visual details'}"
                 )
+
+            # Extract exact visual frame from video file if present on disk
+            frame_image = None
+            if video.file_path and Path(video.file_path).exists():
+                exact_t = self.parse_exact_timestamp(query)
+                frame_t = exact_t if exact_t is not None else (scored_segments[0][0].start_time + 1.0)
+                frame_image = self._extract_frame_at_timestamp(Path(video.file_path), frame_t)
+
             answer = await self._generate_grounded_answer(
-                query, context_lines, video.summary, is_summary=False, confidence_score=confidence_score
+                query, context_lines, video.summary, is_summary=False, confidence_score=confidence_score,
+                frame_image=frame_image
             )
 
         # Record messages in chat history
@@ -414,7 +501,8 @@ class ChatService:
         context_lines: List[str],
         video_summary: Optional[str],
         is_summary: bool = False,
-        confidence_score: float = 0.90
+        confidence_score: float = 0.90,
+        frame_image: Optional[Image.Image] = None
     ) -> str:
         """Call Gemini model with strict grounding rules or clean structured fallback adhering to the decision tree."""
         context_block = "\n\n".join(context_lines)
@@ -429,7 +517,7 @@ class ChatService:
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             genai.configure(api_key=self.api_key, transport="rest")
             candidate_models = []
-            for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+            for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-2.5-flash"]:
                 if m and m not in candidate_models:
                     candidate_models.append(m)
 
@@ -482,13 +570,26 @@ class ChatService:
                     f"Overall Video Metadata: {video_summary or 'N/A'}\n\n"
                     f"User Question: {query}"
                 )
+                if frame_image is not None:
+                    prompt += (
+                        "\n\nCRITICAL VISUAL EVIDENCE:\n"
+                        "A visual keyframe extracted from the exact timestamp in question has been attached.\n"
+                        "Read any on-screen text, titles, song names, overlays, or visual actions shown in this frame.\n"
+                        "Answer the user's question directly, accurately, and factually based on this visual frame."
+                    )
+
+            content_parts = [prompt]
+            if frame_image is not None:
+                content_parts.append(frame_image)
 
             for model_name in candidate_models:
                 try:
                     model = genai.GenerativeModel(model_name)
-                    response = await asyncio.to_thread(model.generate_content, prompt)
+                    response = await asyncio.to_thread(model.generate_content, content_parts)
                     if response and response.text:
-                        return response.text.strip()
+                        txt = response.text.strip()
+                        txt = re.sub(r'^(?:Answer:\s*)+Answer:\s*', 'Answer:\n', txt, flags=re.IGNORECASE)
+                        return txt
                 except Exception as e:
                     logger.warning(f"Model {model_name} failed: {e}. Trying next candidate if available.")
 
