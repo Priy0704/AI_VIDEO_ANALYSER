@@ -53,7 +53,7 @@ class AudioTranscriber:
         audio_part = {"mime_type": "audio/wav", "data": audio_bytes}
         
         prompt = (
-            "You are an expert speech recognition system. Transcribe the spoken audio precisely word-for-word. "
+            "You are an expert multilingual speech recognition system. Transcribe the spoken audio precisely word-for-word in its original language (natively supporting English, Hindi, Marathi, and code-mixed speech). "
             "Output your response strictly as a valid JSON array of chronological objects with keys: "
             "'start' (float seconds), 'end' (float seconds), 'text' (transcribed string). "
             "Example: [{\"start\": 0.0, \"end\": 3.5, \"text\": \"Welcome to the lecture.\"}]"

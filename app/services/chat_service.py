@@ -242,16 +242,16 @@ class ChatService:
         session = await self.get_or_create_session(db, video.id, session_id)
         q_lower = query.lower()
 
-        # Subjective / Intent / Ambiguous emotion detector
+        # Subjective / Intent / Ambiguous emotion detector (Multilingual: English, Hindi, Marathi)
         sensitive_patterns = [
-            r"\b(angry|anger|mad|furious|upset|irritated|annoyed)\b",
-            r"\b(attack|attacked|attacking|assault|assaulted)\b",
-            r"\b(fight|fighting|fought|brawl|punch|punching|hit|hitting)\b",
-            r"\b(aggressive|aggressively|aggression|hostile|hostility)\b",
-            r"\b(argue|argued|arguing|argument|quarrel|dispute)\b",
-            r"\b(intentionally|on purpose|deliberate|deliberately|malicious|maliciously)\b",
-            r"\b(threat|threaten|threatened|threatening)\b",
-            r"\b(harass|harassed|harassing|harassment)\b"
+            r"\b(angry|anger|mad|furious|upset|irritated|annoyed|गुस्सा|नाराज|राग|चिडलेला|क्रोधी)\b",
+            r"\b(attack|attacked|attacking|assault|assaulted|हमला|हल्ला)\b",
+            r"\b(fight|fighting|fought|brawl|punch|punching|hit|hitting|झगड़ा|लड़ाई|भांडण|मारामारी)\b",
+            r"\b(aggressive|aggressively|aggression|hostile|hostility|आक्रामक|आक्रमक)\b",
+            r"\b(argue|argued|arguing|argument|quarrel|dispute|बहस|वाद|तकरार)\b",
+            r"\b(intentionally|on purpose|deliberate|deliberately|malicious|maliciously|जानबूझकर|मुद्दाम|हेतू)\b",
+            r"\b(threat|threaten|threatened|threatening|धमकी)\b",
+            r"\b(harass|harassed|harassing|harassment|सताना|छेडछाड|त्रास)\b"
         ]
         is_sensitive_query = any(re.search(pat, q_lower) for pat in sensitive_patterns)
 
@@ -476,6 +476,8 @@ class ChatService:
                     "   Timestamp:\n   MM:SS–MM:SS\n\n"
                     "   Confidence:\n   <Confidence percentage>%\n\n"
                     "   Supporting Evidence:\n   <Brief visual or spoken dialogue reference>\n\n"
+                    "4. Multilingual Rule:\n"
+                    "   Answer in the same language as the user's question. Natively support English, Hindi (हिंदी), Marathi (मराठी), and mixed languages, while preserving the required headers (Answer, Timestamp, Confidence, Supporting Evidence).\n\n"
                     f"Video Evidence and Timestamps:\n{context_block}\n\n"
                     f"Overall Video Metadata: {video_summary or 'N/A'}\n\n"
                     f"User Question: {query}"
