@@ -110,6 +110,20 @@ class UrlDownloader:
         if not (url_l.startswith("http://") or url_l.startswith("https://") or url_l.startswith("rtsp://") or url_l.startswith("rtmp://")):
             raise ValueError("Invalid URL: must start with http://, https://, or rtsp://")
 
+        # Detect internal authenticated Microsoft Teams chat/meeting/SharePoint links
+        teams_domains = [
+            "teams.cloud.microsoft", "teams.microsoft.com", "teams.live.com",
+            "sharepoint.com", "onedrive.live.com", "1drv.ms"
+        ]
+        if any(d in url_l for d in teams_domains):
+            raise ValueError(
+                "This link is a private corporate Microsoft Teams / SharePoint link that requires Microsoft 365 Single Sign-On (SSO) login.\n\n"
+                "External services cannot log into your private corporate Microsoft account.\n\n"
+                "👉 How to analyze this meeting video:\n"
+                "1. In Teams or SharePoint, click the three dots (...) or top menu on the recording and select 'Download' (saves as .mp4).\n"
+                "2. Click the '📁 Local File' tab on the left and upload your video file for instant analysis!"
+            )
+
         # Directly use FFmpeg for RTSP/RTMP security and IP camera streams
         if url_l.startswith("rtsp://") or url_l.startswith("rtmp://"):
             return self._download_via_ffmpeg(url)
@@ -148,19 +162,22 @@ class UrlDownloader:
                 info = ydl.extract_info(url, download=True)
         except Exception as yt_err:
             err_str = str(yt_err)
-            if "sharepoint" in url_l and ("cookie" in err_str.lower() or "login" in err_str.lower() or "403" in err_str):
+            if any(d in url_l for d in teams_domains):
                 raise ValueError(
-                    "This SharePoint / Teams recording requires Microsoft 365 Single Sign-On (SSO) login. "
-                    "External services cannot log into your private company Microsoft account directly.\n\n"
-                    "👉 How to analyze this meeting recording in 2 steps:\n"
-                    "1. On the SharePoint page, click 'Download' at the top to save the .mp4 file to your computer.\n"
-                    "2. Switch to the 'Local File' tab and drop the file to start instant analysis!"
+                    "This link is an internal Microsoft Teams / SharePoint link that requires corporate login.\n\n"
+                    "Please download the video (.mp4) from Teams and upload it via the '📁 Local File' tab."
                 )
             logger.warning(f"yt-dlp could not process URL '{url}' directly ({yt_err}). Falling back to stream capture...")
             # Fallback to direct stream/file capture via FFmpeg (for direct camera feeds, custom IP cams, or CDN file links)
             try:
                 return self._download_via_ffmpeg(url)
             except Exception:
+                if "Unsupported URL" in err_str:
+                    raise ValueError(
+                        f"This URL is not a supported direct video stream. "
+                        f"If this is a private or login-protected page (e.g. Teams, Zoom with password, or Google Drive), "
+                        f"please download the video (.mp4 / .mov) to your device and upload it via the '📁 Local File' tab!"
+                    )
                 raise ValueError(f"Failed to download video from URL: {str(yt_err)}")
 
         if not info:
