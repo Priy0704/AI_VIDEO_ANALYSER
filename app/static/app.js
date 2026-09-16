@@ -126,8 +126,17 @@ async function importFromUrl() {
         });
 
         if (!res.ok) {
-            const err = await res.json();
-            alert(`Fetch failed: ${err.detail || "Unable to download video from URL."}`);
+            let errorMsg = `Unable to process video (HTTP ${res.status})`;
+            try {
+                const err = await res.json();
+                errorMsg = err.detail || JSON.stringify(err);
+            } catch {
+                try {
+                    const text = await res.text();
+                    if (text) errorMsg = text;
+                } catch {}
+            }
+            alert(`Fetch failed: ${errorMsg}`);
             progressBox.style.display = "none";
             return;
         }
@@ -166,13 +175,23 @@ async function uploadVideoFile(file) {
         });
 
         if (!res.ok) {
-            const err = await res.json();
-            alert(`Upload failed: ${err.detail || "Unknown error"}`);
+            let errorMsg = `Server error (HTTP ${res.status})`;
+            try {
+                const err = await res.json();
+                errorMsg = err.detail || JSON.stringify(err);
+            } catch {
+                try {
+                    const text = await res.text();
+                    if (text) errorMsg = text;
+                } catch {}
+            }
+            alert(`Upload failed: ${errorMsg}`);
             progressBox.style.display = "none";
             return;
         }
 
         const data = await res.json();
+        fileInput.value = "";
         currentVideoId = data.video_id;
         pollVideoStatus(currentVideoId);
     } catch (e) {
@@ -266,17 +285,43 @@ async function deleteVideo(event, videoId) {
                 if (player) player.src = "";
                 document.getElementById("playerTitle").innerText = "Select a video to begin";
                 document.getElementById("playerMetaBadge").style.display = "none";
-                document.getElementById("inspectorContent").innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-play-circle fa-2x"></i>
-                        <p>Select an uploaded video to view synchronized transcript, visual perception, and keyframe timeline.</p>
-                    </div>
-                `;
+                const paneTranscript = document.getElementById("paneTranscript");
+                if (paneTranscript) {
+                    paneTranscript.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fa-solid fa-microphone-lines fa-2x"></i>
+                            <p>Select a video to view synchronized lyrics and speech accordion.</p>
+                        </div>
+                    `;
+                }
+                const paneVisuals = document.getElementById("paneVisuals");
+                if (paneVisuals) {
+                    paneVisuals.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fa-solid fa-camera fa-2x"></i>
+                            <p>Select a video to inspect visual scenes and keyframe headlines.</p>
+                        </div>
+                    `;
+                }
+                const paneOverview = document.getElementById("paneOverview");
+                if (paneOverview) {
+                    paneOverview.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fa-solid fa-file-lines fa-2x"></i>
+                            <p>Select a video to view the executive summary.</p>
+                        </div>
+                    `;
+                }
                 document.getElementById("chatMessages").innerHTML = '<div class="message assistant">Select or upload a video to begin analysis.</div>';
             }
             loadVideoList();
         } else {
-            alert("Failed to delete video.");
+            let errorMsg = "Failed to delete video.";
+            try {
+                const err = await res.json();
+                errorMsg = err.detail || errorMsg;
+            } catch {}
+            alert(errorMsg);
         }
     } catch (e) {
         console.error("Error deleting video:", e);

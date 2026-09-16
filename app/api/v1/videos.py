@@ -42,33 +42,49 @@ async def upload_video(
     Saves file to disk, creates database record, and queues processing asynchronously.
     Returns immediately with 202 Accepted and the video_id.
     """
-    file_ext = Path(file.filename).suffix.lower()
+    clean_filename = Path(file.filename or "video.mp4").name
+    file_ext = Path(clean_filename).suffix.lower()
     if file_ext not in settings.ALLOWED_EXTENSIONS:
-        raise InvalidFileFormatError(file.filename, settings.ALLOWED_EXTENSIONS)
+        raise InvalidFileFormatError(clean_filename, settings.ALLOWED_EXTENSIONS)
 
     # Temporary write to check size and persist
     temp_video_id = os.urandom(8).hex()
-    saved_filename = f"{temp_video_id}_{file.filename}"
+    saved_filename = f"{temp_video_id}_{clean_filename}"
     saved_path = settings.UPLOAD_DIR / saved_filename
 
     total_bytes = 0
     too_large = False
-    with open(saved_path, "wb") as buffer:
-        while chunk := await file.read(1024 * 1024):  # 1MB chunks
-            total_bytes += len(chunk)
-            size_mb = total_bytes / (1024 * 1024)
-            if size_mb > settings.MAX_VIDEO_SIZE_MB:
-                too_large = True
-                break
-            buffer.write(chunk)
+    try:
+        with open(saved_path, "wb") as buffer:
+            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                total_bytes += len(chunk)
+                size_mb = total_bytes / (1024 * 1024)
+                if size_mb > settings.MAX_VIDEO_SIZE_MB:
+                    too_large = True
+                    break
+                buffer.write(chunk)
+    except Exception as err:
+        try:
+            if saved_path.exists():
+                saved_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed writing video file to storage: {str(err)}"
+        )
 
     if too_large:
-        saved_path.unlink(missing_ok=True)
+        try:
+            if saved_path.exists():
+                saved_path.unlink(missing_ok=True)
+        except Exception:
+            pass
         raise FileTooLargeError(total_bytes / (1024 * 1024), settings.MAX_VIDEO_SIZE_MB)
 
     # Create video record in PostgreSQL
     video = Video(
-        filename=file.filename,
+        filename=clean_filename,
         file_path=str(saved_path.resolve()),
         file_size_bytes=total_bytes,
         status=VideoStatus.QUEUED,
