@@ -1,8 +1,9 @@
 import logging
 import asyncio
+import re
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict
 import google.generativeai as genai
 from PIL import Image
 from app.config import settings
@@ -33,20 +34,25 @@ class VisionDescriber:
         # If Gemini is configured, use batched multimodal perception
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             try:
-                # Downsample to at most 6 representative keyframes across the video to respect 5-RPM free-tier limits
-                step = max(1, len(frame_samples) // 6)
-                selected_samples = frame_samples[::step][:6]
+                # Select representative keyframes across the video (at most 8 to respect rate limits)
+                sample_count = min(8, len(frame_samples))
+                step = max(1, len(frame_samples) // sample_count)
+                selected_samples = frame_samples[::step][:sample_count]
 
                 images = [Image.open(s.image_path) for s in selected_samples]
                 time_stamps_str = ", ".join(f"{s.timestamp:.1f}s" for s in selected_samples)
+                
                 prompt = (
-                    f"You are a multimodal video perception engine. The following {len(images)} frames represent "
-                    f"chronological moments in the video at timestamps: {time_stamps_str}.\n"
-                    "Analyze and describe in detail:\n"
-                    "1. The environment, room, and setting.\n"
-                    "2. People present: clothing (colors, polo/t-shirt, lanyards, accessories) and their actions/gestures.\n"
-                    "3. Objects, devices, TV/monitors, screens, and any visible presentation slides, text, or interface.\n"
-                    "4. The sequence of events taking place."
+                    f"You are an expert multimodal video perception engine. The following {len(images)} images represent "
+                    f"chronological frames from the video at timestamps: {time_stamps_str}.\n\n"
+                    "Analyze the visual scenes carefully. Output a structured breakdown for each moment using this format:\n"
+                    "[FRAME: <timestamp>s]\n"
+                    "Headline: <one short concise sentence, max 12 words summarizing the action or setting>\n"
+                    "Details: <2-3 sentences on actors/people, clothing, gestures, environment, lighting, objects, or text>\n\n"
+                    "Example:\n"
+                    "[FRAME: 0.0s]\n"
+                    "Headline: Performers begin an expressive dance in an ambient courtyard.\n"
+                    "Details: Two dancers move across an open floor with warm side-lighting. The dancers wear flowing choreography attire, with subtle architectural backdrop elements visible."
                 )
 
                 candidate_models = []
@@ -66,14 +72,23 @@ class VisionDescriber:
                         logger.warning(f"Vision model {model_name} failed: {err}")
 
                 if dense_desc:
-                    logger.info(f"Batched Gemini perception succeeded: {dense_desc[:150]}...")
-                    return [
-                        VisualObservation(
-                            timestamp=s.timestamp,
-                            description=f"At {s.timestamp:.1f}s in video: {dense_desc}"
+                    logger.info(f"Batched Gemini perception succeeded.")
+                    frame_map = self._parse_frame_blocks(dense_desc, selected_samples)
+                    
+                    # Map each frame sample to its nearest analyzed timestamp block
+                    observations = []
+                    sorted_ts = sorted(frame_map.keys())
+                    for s in frame_samples:
+                        # Find nearest timestamp in frame_map
+                        nearest_ts = min(sorted_ts, key=lambda t: abs(t - s.timestamp))
+                        block_text = frame_map[nearest_ts]
+                        observations.append(
+                            VisualObservation(
+                                timestamp=s.timestamp,
+                                description=block_text
+                            )
                         )
-                        for s in frame_samples
-                    ]
+                    return observations
             except Exception as e:
                 logger.error(f"Batched Gemini visual perception failed: {e}. Falling back.")
 
@@ -86,33 +101,46 @@ class VisionDescriber:
             for s in frame_samples
         ]
 
-    async def describe_single_frame(self, image_path: Path, timestamp: float) -> str:
-        """Analyze a single video frame via Gemini vision."""
-        if not self.api_key or self.api_key == "your_gemini_api_key_here":
-            return self._offline_frame_description(timestamp)
-
-        prompt = (
-            f"You are a multimodal video perception engine. The current timestamp in video is {timestamp:.1f}s. "
-            "Analyze this keyframe thoroughly in 2-3 sentences: "
-            "1. Scene setting and environment. "
-            "2. Notable people, their clothing/appearance (e.g. colors, hats, jackets), and positions. "
-            "3. Actions taking place, interactions, gestures, or movement. "
-            "4. Any visible text, signs, or screen content. "
-            "Be direct, factual, and concise."
-        )
-
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        img = Image.open(image_path)
+    def _parse_frame_blocks(self, text: str, selected_samples: List[FrameSample]) -> Dict[float, str]:
+        """Parse Gemini output into timestamp -> description map."""
+        result: Dict[float, str] = {}
         
-        response = await asyncio.to_thread(model.generate_content, [prompt, img])
-        return response.text.strip()
+        # Regex match [FRAME: <float>s]
+        pattern = re.compile(r'\[FRAME:\s*([0-9.]+)s?\]\s*(.*?)(?=\[FRAME:|\Z)', re.DOTALL | re.IGNORECASE)
+        matches = list(pattern.finditer(text))
+        
+        if matches:
+            for m in matches:
+                try:
+                    ts = float(m.group(1))
+                    body = m.group(2).strip()
+                    # Clean headline and details into standard 2-line format
+                    head_m = re.search(r'Headline:\s*(.+?)(?:\n|$)', body, re.IGNORECASE)
+                    det_m = re.search(r'Details:\s*(.+)', body, re.DOTALL | re.IGNORECASE)
+                    
+                    if head_m:
+                        headline = head_m.group(1).strip()
+                        details = det_m.group(1).strip() if det_m else ""
+                        result[ts] = f"{headline}\n{details}" if details else headline
+                    else:
+                        result[ts] = body
+                except Exception:
+                    continue
+
+        # If regex didn't find [FRAME: ...] markers, split by chronological paragraphs
+        if not result:
+            paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 30]
+            for idx, s in enumerate(selected_samples):
+                if idx < len(paragraphs):
+                    result[s.timestamp] = paragraphs[idx]
+                else:
+                    result[s.timestamp] = paragraphs[-1] if paragraphs else text[:300]
+
+        return result
 
     def _offline_frame_description(self, timestamp: float) -> str:
-        """Deterministic contextual fallback description when visual API is unavailable."""
+        """Contextual fallback description when visual API is unavailable or for testing."""
         return (
-            f"Frame at {timestamp:.1f}s: A male presenter in dark navy blue polo shirt and dark trousers, "
-            f"wearing an ID badge on a red lanyard, stands in front of the conference room. "
-            f"He gestures towards the wall-mounted flat-screen TV display showing presentation slides and LMS dashboard. "
-            f"Visible on the conference table in foreground are smartphones, notebooks, a remote control, and cables. "
-            f"The presenter addresses attendees and begins the demonstration."
+            f"Frame at {timestamp:.1f}s: A presenter in dark navy blue polo shirt and trousers gestures towards the display screen showing slides.\n"
+            f"Visible in the room are attendees, display monitors, and presentation materials."
         )

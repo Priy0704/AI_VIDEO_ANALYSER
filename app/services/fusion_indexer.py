@@ -122,10 +122,16 @@ class FusionIndexer:
         return vec
 
     async def _generate_video_summary(self, segments: List[VideoSegment]) -> str:
-        """Create a hierarchical summary of the entire video."""
+        """Create a cohesive overview of the entire video across its full timeline."""
+        if not segments:
+            return "No segments indexed for this video."
+
+        # Sample representative moments across the entire video (start, middle, end)
+        step = max(1, len(segments) // 8)
+        sampled = segments[::step][:8]
         sample_snippets = [
-            f"[{s.start_time:.0f}s - {s.end_time:.0f}s]: {s.combined_text[:120]}"
-            for s in segments[:10]
+            f"[{s.start_time:.0f}s - {s.end_time:.0f}s]: {s.combined_text[:140]}"
+            for s in sampled
         ]
         context = "\n".join(sample_snippets)
 
@@ -136,8 +142,9 @@ class FusionIndexer:
                     candidate_models.append(m)
 
             prompt = (
-                "Provide a comprehensive 2-3 sentence overview summarizing what occurs in this video "
-                f"based on these chronological segments:\n{context}"
+                "Provide a concise, engaging 2-3 sentence overview summarizing what occurs in this video "
+                "(such as song performance, music video theme, dialogue, or visual progression) "
+                f"based on these chronological moments sampled across the timeline:\n{context}"
             )
             for model_name in candidate_models:
                 try:
@@ -148,7 +155,25 @@ class FusionIndexer:
                 except Exception as e:
                     logger.warning(f"Summary generation with {model_name} failed: {e}")
 
+        # Intelligent fallback summary derived from actual sampled visual descriptions and audio
+        headlines = []
+        for s in sampled:
+            if s.visual_description:
+                first_line = s.visual_description.split("\n")[0].replace("Headline:", "").strip()
+                if first_line and first_line not in headlines and len(first_line) > 10:
+                    headlines.append(first_line)
+
+        lyrics_preview = [s.transcript_text for s in sampled if s.transcript_text and len(s.transcript_text) > 3]
+        parts = []
+        if headlines:
+            parts.append(f"Visual progression highlights: {'; '.join(headlines[:3])}.")
+        if lyrics_preview:
+            parts.append(f"Includes spoken/lyric dialogue such as \"{lyrics_preview[0][:70]}\".")
+
+        if parts:
+            return " ".join(parts)
+
         return (
-            f"Video contains {len(segments)} indexed temporal segments spanning actions, visual scenes, "
-            f"and dialogue from {segments[0].start_time:.1f}s to {segments[-1].end_time:.1f}s."
+            f"Video spans {len(segments)} indexed temporal moments with coordinated visual scenes "
+            f"and audio from {segments[0].start_time:.1f}s to {segments[-1].end_time:.1f}s."
         )

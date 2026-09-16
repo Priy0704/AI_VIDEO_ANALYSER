@@ -425,14 +425,49 @@ function renderTabContent() {
         }
 
         container.innerHTML = visualSegments.map((s, idx) => {
-            const desc = s.visual_description.replace(/^At\s+\d+(\.\d+)?s\s+in\s+video:\s*/i, "");
+            let raw = s.visual_description.replace(/^At\s+\d+(\.\d+)?s\s+in\s+video:\s*/i, "").trim();
+            
+            // Extract one-line headline and detailed context
+            let headline = "";
+            let details = "";
+            
+            const headMatch = raw.match(/^(?:Headline:\s*)?(.+?)(?:\n\s*(?:Details:\s*)?([\s\S]+))?$/i);
+            if (headMatch && headMatch[2]) {
+                headline = headMatch[1].trim();
+                details = headMatch[2].trim();
+            } else {
+                const dotIdx = raw.indexOf(". ");
+                if (dotIdx > 8 && dotIdx < 110) {
+                    headline = raw.substring(0, dotIdx + 1).trim();
+                    details = raw.substring(dotIdx + 2).trim();
+                } else if (raw.length > 80) {
+                    headline = raw.substring(0, 75).trim() + "...";
+                    details = raw;
+                } else {
+                    headline = raw;
+                    details = raw;
+                }
+            }
+
+            headline = headline.replace(/^Headline:\s*/i, "").trim();
+            details = details.replace(/^Details:\s*/i, "").trim();
+
             return `
-                <div class="transcript-item" data-start="${s.start_time}" data-end="${s.end_time}" onclick="seekVideo(${s.start_time})">
-                    <button class="pill-time" title="Jump to scene at ${formatSeconds(s.start_time)}">
-                        <i class="fa-solid fa-camera" style="font-size: 0.55rem;"></i> ${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}
-                    </button>
-                    <div class="transcript-dialogue">
-                        <span style="color: var(--primary); font-weight: 600;">Scene ${idx + 1}:</span> ${escapeHtml(desc)}
+                <div class="scene-card" id="scene-card-${idx}" onclick="toggleSceneAccordion(${idx}, ${s.start_time})">
+                    <div class="scene-header">
+                        <button class="pill-time" title="Jump to ${formatSeconds(s.start_time)}" onclick="event.stopPropagation(); seekVideo(${s.start_time});">
+                            <i class="fa-solid fa-camera" style="font-size: 0.55rem;"></i> ${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}
+                        </button>
+                        <div class="scene-headline" title="${escapeHtml(headline)}">
+                            <span style="color: var(--primary); font-weight: 600;">Scene ${idx + 1}:</span> ${escapeHtml(headline)}
+                        </div>
+                        <i class="fa-solid fa-chevron-down scene-chevron" id="scene-chevron-${idx}"></i>
+                    </div>
+                    <div class="scene-body" id="scene-body-${idx}">
+                        <div class="scene-badge-label">
+                            <i class="fa-solid fa-eye"></i> Visual Context & Setting
+                        </div>
+                        <p style="margin: 0; color: #cbd5e1; font-size: 0.81rem; line-height: 1.5;">${escapeHtml(details || headline)}</p>
                     </div>
                 </div>
             `;
@@ -533,6 +568,14 @@ function seekVideo(seconds) {
     if (player) {
         player.currentTime = seconds;
         player.play();
+    }
+}
+
+function toggleSceneAccordion(idx, seconds) {
+    seekVideo(seconds);
+    const card = document.getElementById(`scene-card-${idx}`);
+    if (card) {
+        card.classList.toggle("expanded");
     }
 }
 

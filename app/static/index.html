@@ -634,6 +634,85 @@
             flex: 1;
         }
 
+        /* Visual Scenes Expandable Accordion */
+        .scene-card {
+            border-radius: var(--radius-sm);
+            background: rgba(30, 41, 59, 0.35);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .scene-card:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+            background: rgba(30, 41, 59, 0.5);
+        }
+
+        .scene-card.expanded {
+            border-color: rgba(56, 189, 248, 0.45);
+            background: rgba(15, 23, 42, 0.7);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        }
+
+        .scene-header {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .scene-headline {
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #f1f5f9;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+
+        .scene-chevron {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            transition: transform 0.2s ease, color 0.2s ease;
+            padding: 0 4px;
+        }
+
+        .scene-card.expanded .scene-chevron {
+            transform: rotate(180deg);
+            color: var(--primary);
+        }
+
+        .scene-body {
+            display: none;
+            padding: 0.75rem 0.85rem 0.85rem 0.85rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.8rem;
+            line-height: 1.55;
+            color: #cbd5e1;
+            background: rgba(0, 0, 0, 0.2);
+            animation: fadeIn 0.15s ease-in;
+        }
+
+        .scene-card.expanded .scene-body {
+            display: block;
+        }
+
+        .scene-badge-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--primary);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
         /* Overview Tab Layout */
         .overview-box {
             background: rgba(30, 41, 59, 0.35);
@@ -1047,6 +1126,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=3.2"></script>
+    <script src="/static/app.js?v=3.3"></script>
 </body>
 </html>
