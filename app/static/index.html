@@ -3,85 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Video Analyser & Grounded Chat</title>
+    <title>VideoIntel AI - Multimodal Video Analyser & Grounded Q&A</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --bg-base: #0f172a;
-            --bg-card: #1e293b;
-            --bg-card-hover: #334155;
+            --bg-base: #090d16;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --bg-card-solid: #111827;
+            --bg-card-hover: rgba(30, 41, 59, 0.7);
             --primary: #38bdf8;
             --primary-hover: #0ea5e9;
+            --primary-glow: rgba(56, 189, 248, 0.2);
+            --accent-cyan: #06b6d4;
+            --accent-purple: #818cf8;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
-            --border: #334155;
-            --accent-green: #22c55e;
-            --accent-yellow: #eab308;
+            --text-dark: #64748b;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(56, 189, 248, 0.4);
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
             --accent-red: #ef4444;
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
         body {
             background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(129, 140, 248, 0.06) 0px, transparent 50%);
             color: var(--text-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
 
+        /* Custom Modern Scrollbars */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        /* Top Navbar */
         header {
-            background-color: var(--bg-card);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border);
-            padding: 1rem 2rem;
+            padding: 0.85rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 50;
         }
 
-        .logo {
+        .logo-wrap {
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--primary);
+            text-decoration: none;
         }
 
-        .badge-microservice {
-            font-size: 0.75rem;
-            background: rgba(56, 189, 248, 0.15);
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.1rem;
+            box-shadow: 0 0 16px var(--primary-glow);
+        }
+
+        .logo-text {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to right, #f8fafc, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge-system {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            background: rgba(56, 189, 248, 0.1);
             color: var(--primary);
-            border: 1px solid var(--primary);
+            border: 1px solid rgba(56, 189, 248, 0.25);
             padding: 0.2rem 0.6rem;
             border-radius: 9999px;
-            font-weight: 500;
+            margin-left: 0.5rem;
         }
 
-        .nav-links a {
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+            font-size: 0.78rem;
             color: var(--text-muted);
-            text-decoration: none;
-            margin-left: 1.5rem;
-            font-size: 0.9rem;
-            transition: color 0.2s;
         }
 
-        .nav-links a:hover {
-            color: var(--text-main);
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+            animation: pulse-glow 2s infinite;
         }
 
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        /* 3-Column Layout */
         .main-container {
             display: grid;
-            grid-template-columns: 340px 1fr 420px;
-            gap: 1.5rem;
-            padding: 1.5rem 2rem;
+            grid-template-columns: 320px 1fr 400px;
+            gap: 1.25rem;
+            padding: 1.25rem 1.5rem;
             flex: 1;
-            height: calc(100vh - 75px);
+            height: calc(100vh - 65px);
             overflow: hidden;
         }
 
@@ -94,242 +170,417 @@
         }
 
         .card {
-            background-color: var(--bg-card);
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem;
+            border-radius: var(--radius-lg);
+            padding: 1.1rem;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
+            position: relative;
         }
 
         .card-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            margin-bottom: 0.85rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .card-title i {
             color: var(--primary);
         }
 
-        /* Upload Area */
+        /* Upload Dropzone */
         .upload-dropzone {
-            border: 2px dashed var(--border);
-            border-radius: 8px;
-            padding: 1.5rem 1rem;
+            border: 1.5px dashed rgba(56, 189, 248, 0.35);
+            border-radius: var(--radius-md);
+            padding: 1.25rem 0.85rem;
             text-align: center;
             cursor: pointer;
-            transition: border-color 0.2s, background 0.2s;
+            background: rgba(56, 189, 248, 0.02);
+            transition: all 0.25s ease;
         }
 
         .upload-dropzone:hover {
             border-color: var(--primary);
-            background: rgba(56, 189, 248, 0.05);
+            background: rgba(56, 189, 248, 0.08);
+            transform: translateY(-1px);
         }
 
-        .btn {
-            background-color: var(--primary);
-            color: #0f172a;
-            border: none;
-            border-radius: 6px;
-            padding: 0.6rem 1rem;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: background-color 0.2s;
+        .upload-icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.1);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
         }
 
-        .btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-outline {
-            background: transparent;
-            color: var(--text-main);
+        /* Progress Bar */
+        .progress-box {
+            display: none;
+            margin-top: 0.85rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.85rem;
             border: 1px solid var(--border);
         }
 
-        .btn-outline:hover {
-            background: var(--bg-card-hover);
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.08);
+            height: 6px;
+            border-radius: 9999px;
+            margin-top: 0.4rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            background: linear-gradient(90deg, var(--primary), var(--accent-cyan));
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: 9999px;
         }
 
         /* Video List */
         .video-list {
-            margin-top: 1rem;
+            margin-top: 0.65rem;
             overflow-y: auto;
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.45rem;
+            padding-right: 0.2rem;
         }
 
         .video-item {
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(30, 41, 59, 0.45);
             border: 1px solid var(--border);
-            padding: 0.75rem;
-            border-radius: 6px;
+            padding: 0.75rem 0.85rem;
+            border-radius: var(--radius-md);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            position: relative;
         }
 
-        .video-item:hover, .video-item.active {
+        .video-item:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+            background: rgba(30, 41, 59, 0.8);
+            transform: translateX(2px);
+        }
+
+        .video-item.active {
             border-color: var(--primary);
-            background: rgba(56, 189, 248, 0.08);
+            background: rgba(56, 189, 248, 0.1);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+        }
+
+        .video-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 10%;
+            bottom: 10%;
+            width: 3px;
+            background: var(--primary);
+            border-radius: 0 4px 4px 0;
         }
 
         .video-name {
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 600;
+            color: #f1f5f9;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
         .video-meta {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             color: var(--text-muted);
-            margin-top: 0.25rem;
+            margin-top: 0.3rem;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
 
         .btn-delete-video {
             background: transparent;
             border: none;
-            color: var(--text-muted);
+            color: var(--text-dark);
             cursor: pointer;
-            font-size: 0.85rem;
             padding: 2px 6px;
             border-radius: 4px;
+            font-size: 0.8rem;
             transition: all 0.2s;
-            line-height: 1;
         }
 
         .btn-delete-video:hover {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
+            color: var(--accent-red);
+            background: rgba(239, 68, 68, 0.15);
         }
 
-        /* Progress indicator */
-        .progress-box {
-            margin-top: 1rem;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem;
-            display: none;
-        }
-
-        .progress-bar-bg {
-            background: var(--border);
-            height: 6px;
-            border-radius: 3px;
-            overflow: hidden;
-            margin: 0.5rem 0;
-        }
-
-        .progress-bar-fill {
-            background: var(--primary);
-            height: 100%;
-            width: 0%;
-            transition: width 0.3s;
-        }
-
-        /* Video Player section */
-        .player-container {
+        /* CENTER COLUMN: Video Player & Inspector */
+        .center-card {
             display: flex;
             flex-direction: column;
-            flex: 1;
+            overflow: hidden;
+            padding: 0;
+        }
+
+        .player-header {
+            padding: 0.85rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .video-wrapper {
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-height: 48%;
+            position: relative;
         }
 
         video {
             width: 100%;
-            max-height: 420px;
-            background: #000;
-            border-radius: 8px;
+            max-height: 320px;
+            display: block;
             outline: none;
+            background: #000;
         }
 
-        .video-info-panel {
-            margin-top: 1rem;
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid var(--border);
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-y: auto;
-            max-height: 250px;
-            font-size: 0.85rem;
-        }
-
-        .transcript-list {
+        /* Inspector Tabs & Container */
+        .inspector-panel {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 0.45rem;
-            margin-top: 0.5rem;
-            max-height: 150px;
-            overflow-y: auto;
-            padding-right: 0.3rem;
+            overflow: hidden;
+            background: rgba(11, 15, 25, 0.4);
         }
 
-        .transcript-row {
+        .inspector-tabs {
             display: flex;
-            align-items: flex-start;
-            gap: 0.5rem;
-            background: rgba(30, 41, 59, 0.5);
-            padding: 0.4rem 0.6rem;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: background 0.15s;
+            gap: 0.35rem;
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.5);
         }
 
-        .transcript-row:hover {
-            background: rgba(56, 189, 248, 0.1);
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 0.4rem 0.85rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            background: rgba(56, 189, 248, 0.12);
             border-color: rgba(56, 189, 248, 0.25);
         }
 
-        .transcript-time {
-            background: rgba(56, 189, 248, 0.15);
-            color: #38bdf8;
-            font-family: monospace;
-            font-size: 0.72rem;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
+        .tab-badge {
+            font-size: 0.68rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.08);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .tab-btn.active .tab-badge {
+            background: rgba(56, 189, 248, 0.25);
+            color: var(--primary);
+        }
+
+        /* Inspector Actions (Search & Copy) */
+        .inspector-actions-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            gap: 0.75rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.25);
+        }
+
+        .search-box-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.3rem 0.65rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .search-box-wrap input {
+            background: transparent;
             border: none;
+            color: var(--text-main);
+            outline: none;
+            width: 100%;
+            font-size: 0.78rem;
+        }
+
+        .btn-action-sm {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.3rem 0.65rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .btn-action-sm:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+        }
+
+        /* Tab Content List */
+        .tab-pane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .transcript-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
+            border-radius: var(--radius-sm);
+            background: rgba(30, 41, 59, 0.3);
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .transcript-item:hover {
+            background: rgba(56, 189, 248, 0.06);
+            border-color: rgba(56, 189, 248, 0.2);
+            transform: translateX(2px);
+        }
+
+        .transcript-item.active-speech {
+            background: rgba(56, 189, 248, 0.12);
+            border-color: var(--primary);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .pill-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--primary);
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 0.2rem 0.45rem;
+            border-radius: 4px;
             white-space: nowrap;
             display: inline-flex;
             align-items: center;
-            gap: 0.25rem;
-            transition: all 0.15s;
+            gap: 0.3rem;
+            cursor: pointer;
         }
 
-        .transcript-time:hover {
+        .pill-time:hover {
             background: var(--primary);
-            color: #0f172a;
-            font-weight: 600;
+            color: #090d16;
         }
 
-        .transcript-text {
-            color: #f1f5f9;
+        .transcript-dialogue {
             font-size: 0.82rem;
-            line-height: 1.35;
+            line-height: 1.45;
+            color: #e2e8f0;
+            flex: 1;
         }
 
-        /* Chat Panel */
-        .chat-container {
+        /* Overview Tab Layout */
+        .overview-box {
+            background: rgba(30, 41, 59, 0.35);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            line-height: 1.55;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+        }
+
+        .overview-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-top: 0.85rem;
+        }
+
+        .meta-tile {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 0.6rem 0.75rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .meta-tile-label {
+            font-size: 0.7rem;
+            color: var(--text-dark);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .meta-tile-val {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-top: 0.2rem;
+        }
+
+        /* RIGHT: Grounded Chat */
+        .chat-column {
             display: flex;
             flex-direction: column;
-            height: 100%;
+            overflow: hidden;
         }
 
         .chat-messages {
@@ -337,124 +588,204 @@
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 1rem;
-            padding-right: 0.5rem;
+            gap: 0.75rem;
+            padding-right: 0.3rem;
         }
 
         .message {
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-            max-width: 90%;
+            max-width: 88%;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-md);
+            font-size: 0.83rem;
+            line-height: 1.45;
+            animation: fadeIn 0.2s ease-in-out;
         }
 
-        .message.user {
-            align-self: flex-end;
-            background: #2563eb;
-            color: #fff;
-            padding: 0.75rem 1rem;
-            border-radius: 12px 12px 0 12px;
-            font-size: 0.9rem;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .message.assistant {
             align-self: flex-start;
-            background: rgba(15, 23, 42, 0.8);
+            background: rgba(30, 41, 59, 0.65);
             border: 1px solid var(--border);
-            padding: 0.85rem 1rem;
-            border-radius: 12px 12px 12px 0;
-            font-size: 0.9rem;
-            width: 100%;
+            color: #f1f5f9;
         }
 
-        .citation-list {
+        .message.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #0284c7, #0ea5e9);
+            color: white;
+            border-bottom-right-radius: 2px;
+            font-weight: 500;
+        }
+
+        .message-meta {
+            margin-top: 0.5rem;
+            padding-top: 0.4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
+            gap: 0.4rem;
+            align-items: center;
         }
 
-        .citation-chip {
+        .citation-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
             background: rgba(56, 189, 248, 0.15);
             color: var(--primary);
             border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 0.15rem 0.45rem;
             border-radius: 4px;
-            padding: 0.2rem 0.5rem;
-            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .citation-tag:hover {
+            background: var(--primary);
+            color: #090d16;
             font-weight: 600;
+        }
+
+        /* Quick Suggestions Chips */
+        .suggestions-bar {
+            display: flex;
+            gap: 0.35rem;
+            overflow-x: auto;
+            padding: 0.5rem 0;
+            margin-top: 0.5rem;
+        }
+
+        .suggestion-chip {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.72rem;
+            white-space: nowrap;
             cursor: pointer;
             transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.3rem;
         }
 
-        .citation-chip:hover {
-            background: var(--primary);
-            color: #0f172a;
+        .suggestion-chip:hover {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: rgba(56, 189, 248, 0.08);
         }
 
-        .confidence-tag {
-            font-size: 0.7rem;
-            padding: 0.15rem 0.4rem;
-            border-radius: 4px;
-            display: inline-block;
-            margin-top: 0.3rem;
-        }
-
-        .confidence-high { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
-        .confidence-med { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
-        .confidence-low { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
-
+        /* Chat Input Box */
         .chat-input-box {
-            margin-top: 1rem;
             display: flex;
             gap: 0.5rem;
+            margin-top: 0.5rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 0.35rem 0.45rem 0.35rem 0.85rem;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input-box:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 12px var(--primary-glow);
         }
 
         .chat-input-box input {
             flex: 1;
-            background: #0f172a;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.6rem 0.8rem;
+            background: transparent;
+            border: none;
             color: var(--text-main);
-            font-size: 0.9rem;
             outline: none;
+            font-size: 0.84rem;
         }
 
-        .chat-input-box input:focus {
-            border-color: var(--primary);
+        .btn-send {
+            background: var(--primary);
+            color: #090d16;
+            border: none;
+            border-radius: var(--radius-sm);
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
-        /* HITL Modal / Panel */
+        .btn-send:hover {
+            background: var(--primary-hover);
+            transform: scale(1.05);
+        }
+
+        /* HITL Section */
         .hitl-section {
-            margin-top: 1rem;
+            margin-top: 0.75rem;
             border-top: 1px solid var(--border);
-            padding-top: 1rem;
+            padding-top: 0.75rem;
         }
 
         .hitl-item {
-            background: rgba(239, 68, 68, 0.08);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 6px;
-            padding: 0.6rem;
-            font-size: 0.8rem;
-            margin-bottom: 0.5rem;
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.78rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+
+        .badge-completed {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-queued {
+            background: rgba(148, 163, 184, 0.15);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            color: var(--text-dark);
+            gap: 0.5rem;
+            padding: 1.5rem;
+            font-size: 0.82rem;
         }
     </style>
 </head>
 <body>
 
+    <!-- Professional Navbar (No developer /docs or /health links) -->
     <header>
-        <div class="logo">
-            <i class="fa-solid fa-film"></i>
-            <span>AI Video Analyser</span>
-            <span class="badge-microservice">PostgreSQL + pgvector</span>
+        <div class="logo-wrap">
+            <div class="logo-icon">
+                <i class="fa-solid fa-play"></i>
+            </div>
+            <div>
+                <span class="logo-text">VideoIntel AI</span>
+                <span class="badge-system">Multimodal Grounding</span>
+            </div>
         </div>
-        <div class="nav-links">
-            <a href="/docs" target="_blank"><i class="fa-solid fa-book"></i> OpenAPI Specs</a>
-            <a href="/health" target="_blank"><i class="fa-solid fa-heart-pulse"></i> Health</a>
+        <div class="header-status">
+            <span class="pulse-dot"></span>
+            <span>Multimodal Engine Online</span>
         </div>
     </header>
 
@@ -463,89 +794,137 @@
         <div class="card">
             <div class="card-title">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
-                <span>Ingest Video</span>
+                <span>Ingest Videos</span>
             </div>
 
             <div class="upload-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-                <i class="fa-solid fa-file-video fa-2x" style="color: var(--primary); margin-bottom: 0.5rem;"></i>
-                <p style="font-size: 0.85rem; font-weight: 500;">Click or Drop Video(s) (MP4/MOV)</p>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Single or Multi-Video Batch Upload</p>
+                <div class="upload-icon-circle">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <p style="font-size: 0.85rem; font-weight: 600; color: #f1f5f9;">Upload Video(s)</p>
+                <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Single or batch upload (.mp4, .mov)</p>
                 <input type="file" id="fileInput" accept=".mp4,.mov,.mkv,.avi" multiple style="display: none;">
             </div>
 
             <div class="progress-box" id="progressBox">
-                <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                    <span id="stageLabel">Processing...</span>
-                    <span id="percentLabel">0%</span>
+                <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+                    <span id="stageLabel" style="color: var(--primary);">Processing...</span>
+                    <span id="percentLabel" style="font-family: 'JetBrains Mono', monospace;">0%</span>
                 </div>
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fill" id="progressBar"></div>
                 </div>
             </div>
 
-            <div class="card-title" style="margin-top: 1.5rem;">
-                <i class="fa-solid fa-list-check"></i>
-                <span>Indexed Videos</span>
+            <div class="card-title" style="margin-top: 1.25rem; font-size: 0.88rem;">
+                <i class="fa-solid fa-layer-group"></i>
+                <span>Indexed Library</span>
             </div>
             <div class="video-list" id="videoList">
-                <p style="font-size: 0.8rem; color: var(--text-muted);">Loading videos...</p>
+                <p style="font-size: 0.78rem; color: var(--text-dark); text-align: center; padding-top: 1rem;">Loading videos...</p>
             </div>
         </div>
 
-        <!-- CENTER: Video Player & Timeline -->
-        <div class="card">
-            <div class="card-title">
-                <i class="fa-solid fa-play"></i>
-                <span id="playerTitle">Video Playback</span>
+        <!-- CENTER: Video Player & Tabbed Inspector -->
+        <div class="card center-card">
+            <div class="player-header">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-film" style="color: var(--primary);"></i>
+                    <span id="playerTitle" style="font-weight: 600; font-size: 0.88rem;">Select a video to begin</span>
+                </div>
+                <div id="playerMetaBadge" style="display: none;">
+                    <span class="badge badge-completed" id="playerDurationText">00:00</span>
+                </div>
             </div>
 
-            <div class="player-container">
-                <video id="videoPlayer" controls>
+            <div class="video-wrapper">
+                <video id="videoPlayer" controls playsinline>
                     Your browser does not support the video tag.
                 </video>
+            </div>
 
-                <div class="video-info-panel" id="summaryPanel">
-                    <p style="font-weight: 600; margin-bottom: 0.3rem;">Video Summary & Perception</p>
-                    <p id="summaryText" style="color: var(--text-muted);">Select or upload a video to inspect audio transcripts, visual perception, and timestamped segments.</p>
+            <!-- Sleek Tabbed Inspector -->
+            <div class="inspector-panel">
+                <div class="inspector-tabs">
+                    <button class="tab-btn active" id="tabBtnTranscript" onclick="switchTab('transcript')">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span>Transcript</span>
+                        <span class="tab-badge" id="tabTranscriptBadge">0</span>
+                    </button>
+                    <button class="tab-btn" id="tabBtnVisuals" onclick="switchTab('visuals')">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>Visual Scenes</span>
+                        <span class="tab-badge" id="tabVisualsBadge">0</span>
+                    </button>
+                    <button class="tab-btn" id="tabBtnOverview" onclick="switchTab('overview')">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span>Overview</span>
+                    </button>
+                </div>
+
+                <!-- Sub-bar for search & copy actions -->
+                <div class="inspector-actions-bar" id="inspectorActionsBar">
+                    <div class="search-box-wrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="transcriptSearch" placeholder="Search spoken words, names, topics..." oninput="filterTranscript(this.value)">
+                    </div>
+                    <button class="btn-action-sm" onclick="copyTranscript()" id="copyBtn">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>Copy</span>
+                    </button>
+                </div>
+
+                <!-- Scrollable Tab Content Container -->
+                <div class="tab-pane" id="inspectorContent">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-play-circle fa-2x"></i>
+                        <p>Select an uploaded video to view synchronized transcript, visual perception, and keyframe timeline.</p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- RIGHT: Grounded Chat & HITL -->
-        <div class="card">
+        <div class="card chat-column">
             <div class="card-title">
-                <i class="fa-solid fa-comments"></i>
-                <span>Grounded Chat</span>
+                <i class="fa-solid fa-robot"></i>
+                <span>Grounded AI Assistant</span>
             </div>
 
-            <div class="chat-container">
-                <div class="chat-messages" id="chatMessages">
-                    <div class="message assistant">
-                        Hello! Ask any question about the selected video: visual details, actions, dialogues, or specific timestamps (e.g. <i>"what happened at 0:10?"</i>).
-                    </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    Hello! Ask any question about the selected video: actions, spoken dialogue, people, visible items, or timestamps (e.g. <i>"What is Saksham LMS?"</i> or <i>"What did he ask Satya?"</i>).
                 </div>
+            </div>
 
-                <div class="chat-input-box">
-                    <input type="text" id="queryInput" placeholder="Ask anything about this video..." onkeypress="handleKeyPress(event)">
-                    <button class="btn" id="sendBtn" onclick="sendChatMessage()">
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
+            <!-- Quick Suggestion Prompts -->
+            <div class="suggestions-bar">
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is Saksham LMS?')">💡 Saksham LMS?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What did the speaker say to Satya?')">💡 Asked Satya?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is the speaker wearing?')">💡 Clothes / Look?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize the video')">💡 Summary</button>
+            </div>
+
+            <div class="chat-input-box">
+                <input type="text" id="queryInput" placeholder="Ask anything grounded in this video..." onkeypress="handleKeyPress(event)">
+                <button class="btn-send" id="sendBtn" onclick="sendChatMessage()" title="Send Question">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+
+            <!-- HITL Review Queue -->
+            <div class="hitl-section">
+                <div class="card-title" style="font-size: 0.8rem; margin-bottom: 0.4rem;">
+                    <i class="fa-solid fa-user-shield" style="color: var(--accent-yellow);"></i>
+                    <span>HITL Review Queue (Uncertain Queries)</span>
                 </div>
-
-                <!-- HITL Review Queue -->
-                <div class="hitl-section">
-                    <div class="card-title" style="font-size: 0.85rem; margin-bottom: 0.5rem;">
-                        <i class="fa-solid fa-user-shield" style="color: var(--accent-yellow);"></i>
-                        <span>HITL Review Queue (Uncertain Queries)</span>
-                    </div>
-                    <div id="hitlContainer" style="max-height: 140px; overflow-y: auto;">
-                        <p style="font-size: 0.75rem; color: var(--text-muted);">No pending reviews.</p>
-                    </div>
+                <div id="hitlContainer" style="max-height: 120px; overflow-y: auto;">
+                    <p style="font-size: 0.72rem; color: var(--text-dark);">No pending reviews.</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="/static/app.js?v=2.2"></script>
+    <script src="/static/app.js?v=3.0"></script>
 </body>
 </html>
