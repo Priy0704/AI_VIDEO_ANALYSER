@@ -935,14 +935,3 @@ function escapeHtml(text) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
-
-function toggleScrollbarSide() {
-    const chatMessages = document.getElementById("chatMessages");
-    const lbl = document.getElementById("lblScrollSide");
-    if (!chatMessages) return;
-
-    const isOpposite = chatMessages.classList.toggle("scrollbar-opposite");
-    if (lbl) {
-        lbl.innerText = isOpposite ? "Left Scroller" : "Right Scroller";
-    }
-}
