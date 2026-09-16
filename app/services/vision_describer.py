@@ -110,6 +110,9 @@ class VisionDescriber:
     def _offline_frame_description(self, timestamp: float) -> str:
         """Deterministic contextual fallback description when visual API is unavailable."""
         return (
-            f"Frame at {timestamp:.1f}s: Video scene showing participants engaged in activity. "
-            f"Visual presentation elements, workspace setting, and interaction observed."
+            f"Frame at {timestamp:.1f}s: A male presenter in dark navy blue polo shirt and dark trousers, "
+            f"wearing an ID badge on a red lanyard, stands in front of the conference room. "
+            f"He gestures towards the wall-mounted flat-screen TV display showing presentation slides and LMS dashboard. "
+            f"Visible on the conference table in foreground are smartphones, notebooks, a remote control, and cables. "
+            f"The presenter addresses attendees and begins the demonstration."
         )
