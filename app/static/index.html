@@ -893,16 +893,16 @@
 
             <div class="chat-messages" id="chatMessages">
                 <div class="message assistant">
-                    Hello! Ask any question about the selected video: actions, spoken dialogue, people, visible items, or timestamps (e.g. <i>"What is Saksham LMS?"</i> or <i>"What did he ask Satya?"</i>).
+                    Hello! Ask any question about the selected video: actions, spoken dialogue, people, visible items, or timestamps (e.g. <i>"What is being explained?"</i> or <i>"What happened around 0:10?"</i>).
                 </div>
             </div>
 
             <!-- Quick Suggestion Prompts -->
             <div class="suggestions-bar">
-                <button class="suggestion-chip" onclick="sendQuickPrompt('What is Saksham LMS?')">💡 Saksham LMS?</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('What did the speaker say to Satya?')">💡 Asked Satya?</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('What is the speaker wearing?')">💡 Clothes / Look?</button>
                 <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize the video')">💡 Summary</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is the speaker explaining?')">💡 What's Explained?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Who is speaking?')">💡 Who is Speaking?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is shown on the screen?')">💡 Screen Content?</button>
             </div>
 
             <div class="chat-input-box">
@@ -925,6 +925,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=3.0"></script>
+    <script src="/static/app.js?v=3.1"></script>
 </body>
 </html>
