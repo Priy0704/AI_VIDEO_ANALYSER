@@ -518,61 +518,7 @@
             color: var(--primary);
         }
 
-        /* Inspector Actions (Search & Copy) */
-        .inspector-actions-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.5rem 1rem;
-            gap: 0.75rem;
-            border-bottom: 1px solid var(--border);
-            background: rgba(15, 23, 42, 0.25);
-        }
-
-        .search-box-wrap {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            flex: 1;
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 0.3rem 0.65rem;
-            font-size: 0.78rem;
-            color: var(--text-muted);
-        }
-
-        .search-box-wrap input {
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            outline: none;
-            width: 100%;
-            font-size: 0.78rem;
-        }
-
-        .btn-action-sm {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-            padding: 0.3rem 0.65rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.75rem;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.35rem;
-            white-space: nowrap;
-            transition: all 0.2s;
-        }
-
-        .btn-action-sm:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-main);
-        }
-
-        /* Tab Content List */
+        /* Tab Content Lists (Separate Independent Scrollers) */
         .tab-pane {
             flex: 1;
             overflow-y: auto;
@@ -580,30 +526,80 @@
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
+            height: 100%;
         }
 
-        .transcript-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-            padding: 0.6rem 0.75rem;
+        /* Transcript Accordion Cards */
+        .transcript-card {
             border-radius: var(--radius-sm);
-            background: rgba(30, 41, 59, 0.3);
-            border: 1px solid transparent;
+            background: rgba(30, 41, 59, 0.35);
+            border: 1px solid var(--border);
+            overflow: hidden;
             transition: all 0.2s ease;
-            cursor: pointer;
         }
 
-        .transcript-item:hover {
-            background: rgba(56, 189, 248, 0.06);
-            border-color: rgba(56, 189, 248, 0.2);
-            transform: translateX(2px);
+        .transcript-card:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+            background: rgba(30, 41, 59, 0.5);
         }
 
-        .transcript-item.active-speech {
-            background: rgba(56, 189, 248, 0.12);
+        .transcript-card.expanded {
+            border-color: rgba(56, 189, 248, 0.45);
+            background: rgba(15, 23, 42, 0.7);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        }
+
+        .transcript-card.active-speech {
             border-color: var(--primary);
+            background: rgba(56, 189, 248, 0.12);
             box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .transcript-header {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .transcript-headline {
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #f1f5f9;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+
+        .transcript-chevron {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            transition: transform 0.2s ease, color 0.2s ease;
+            padding: 0 4px;
+        }
+
+        .transcript-card.expanded .transcript-chevron {
+            transform: rotate(180deg);
+            color: var(--primary);
+        }
+
+        .transcript-body {
+            display: none;
+            padding: 0.75rem 0.85rem 0.85rem 0.85rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.82rem;
+            line-height: 1.55;
+            color: #cbd5e1;
+            background: rgba(0, 0, 0, 0.2);
+            animation: fadeIn 0.15s ease-in;
+        }
+
+        .transcript-card.expanded .transcript-body {
+            display: block;
         }
 
         .pill-time {
@@ -625,13 +621,6 @@
         .pill-time:hover {
             background: var(--primary);
             color: #090d16;
-        }
-
-        .transcript-dialogue {
-            font-size: 0.82rem;
-            line-height: 1.45;
-            color: #e2e8f0;
-            flex: 1;
         }
 
         /* Visual Scenes Expandable Accordion */
@@ -1063,23 +1052,25 @@
                     </button>
                 </div>
 
-                <!-- Sub-bar for search & copy actions -->
-                <div class="inspector-actions-bar" id="inspectorActionsBar">
-                    <div class="search-box-wrap">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input type="text" id="transcriptSearch" placeholder="Search spoken words, names, topics..." oninput="filterTranscript(this.value)">
+                <!-- 3 Independent Scrollers for Transcript, Visual Scenes, and Overview -->
+                <div class="tab-pane" id="paneTranscript" style="display: flex;">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-microphone-lines fa-2x"></i>
+                        <p>Select a video to view synchronized lyrics and speech accordion.</p>
                     </div>
-                    <button class="btn-action-sm" onclick="copyTranscript()" id="copyBtn">
-                        <i class="fa-regular fa-copy"></i>
-                        <span>Copy</span>
-                    </button>
                 </div>
 
-                <!-- Scrollable Tab Content Container -->
-                <div class="tab-pane" id="inspectorContent">
+                <div class="tab-pane" id="paneVisuals" style="display: none;">
                     <div class="empty-state">
-                        <i class="fa-solid fa-play-circle fa-2x"></i>
-                        <p>Select an uploaded video to view synchronized transcript, visual perception, and keyframe timeline.</p>
+                        <i class="fa-solid fa-camera fa-2x"></i>
+                        <p>Select a video to inspect visual scenes and keyframe headlines.</p>
+                    </div>
+                </div>
+
+                <div class="tab-pane" id="paneOverview" style="display: none;">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-file-lines fa-2x"></i>
+                        <p>Select a video to view the executive summary.</p>
                     </div>
                 </div>
             </div>
@@ -1126,6 +1117,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=3.4"></script>
+    <script src="/static/app.js?v=3.5"></script>
 </body>
 </html>

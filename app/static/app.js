@@ -348,134 +348,171 @@ function switchTab(tabName) {
     document.getElementById("tabBtnVisuals").classList.toggle("active", tabName === 'visuals');
     document.getElementById("tabBtnOverview").classList.toggle("active", tabName === 'overview');
 
-    // Show/hide sub-bar actions
-    const actionsBar = document.getElementById("inspectorActionsBar");
-    if (tabName === 'transcript') {
-        actionsBar.style.display = "flex";
-    } else {
-        actionsBar.style.display = "none";
-    }
+    // Display appropriate independent scroller pane
+    const paneTranscript = document.getElementById("paneTranscript");
+    const paneVisuals = document.getElementById("paneVisuals");
+    const paneOverview = document.getElementById("paneOverview");
 
-    renderTabContent();
+    if (paneTranscript) paneTranscript.style.display = (tabName === 'transcript' ? 'flex' : 'none');
+    if (paneVisuals) paneVisuals.style.display = (tabName === 'visuals' ? 'flex' : 'none');
+    if (paneOverview) paneOverview.style.display = (tabName === 'overview' ? 'flex' : 'none');
 }
 
 function renderTabContent() {
-    const container = document.getElementById("inspectorContent");
+    const paneTranscript = document.getElementById("paneTranscript");
+    const paneVisuals = document.getElementById("paneVisuals");
+    const paneOverview = document.getElementById("paneOverview");
+
     if (!currentVideoData) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fa-solid fa-play-circle fa-2x"></i>
-                <p>Select an uploaded video to view synchronized transcript, visual perception, and keyframe timeline.</p>
-            </div>
-        `;
+        if (paneTranscript) {
+            paneTranscript.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-microphone-lines fa-2x"></i>
+                    <p>Select an uploaded video to view synchronized transcript and lyrics.</p>
+                </div>
+            `;
+        }
+        if (paneVisuals) {
+            paneVisuals.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-camera fa-2x"></i>
+                    <p>Select an uploaded video to view visual scenes and keyframes.</p>
+                </div>
+            `;
+        }
+        if (paneOverview) {
+            paneOverview.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-file-lines fa-2x"></i>
+                    <p>Select an uploaded video to view executive summary.</p>
+                </div>
+            `;
+        }
         return;
     }
 
     const segments = currentVideoData.segments || [];
 
-    if (currentActiveTab === 'transcript') {
+    // 1. RENDER TRANSCRIPT ACCORDION (Separate Scroller)
+    if (paneTranscript) {
         const transcriptSegments = segments.filter(s => s.transcript_text && s.transcript_text.trim().length > 0);
 
         if (transcriptSegments.length === 0) {
-            container.innerHTML = `
+            paneTranscript.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-microphone-slash fa-2x" style="color: var(--text-dark);"></i>
-                    <p>No spoken dialogue detected in this video.<br>
+                    <p>No spoken dialogue or lyrics detected in this video.<br>
                     <a href="javascript:void(0)" onclick="switchTab('visuals')" style="color: var(--primary); text-decoration: none; font-weight: 600;">View Visual Scenes Tab &rarr;</a></p>
                 </div>
             `;
-            return;
+        } else {
+            // Group consecutive identical segments
+            const grouped = [];
+            transcriptSegments.forEach(s => {
+                const text = s.transcript_text.trim();
+                const last = grouped[grouped.length - 1];
+                if (last && last.text === text) {
+                    last.end_time = s.end_time;
+                } else {
+                    grouped.push({
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        text: text
+                    });
+                }
+            });
+
+            paneTranscript.innerHTML = grouped.map((g, idx) => {
+                const firstLine = (g.text || "").split("\n")[0].trim();
+                const preview = firstLine.length > 70 ? firstLine.substring(0, 67) + "..." : firstLine;
+                return `
+                    <div class="transcript-card" id="transcript-card-${idx}" data-start="${g.start_time}" data-end="${g.end_time}" onclick="toggleTranscriptAccordion(${idx}, ${g.start_time})">
+                        <div class="transcript-header">
+                            <button class="pill-time" title="Jump to ${formatSeconds(g.start_time)}" onclick="event.stopPropagation(); seekVideo(${g.start_time});">
+                                <i class="fa-solid fa-microphone-lines" style="font-size: 0.55rem;"></i> ${formatSeconds(g.start_time)} - ${formatSeconds(g.end_time)}
+                            </button>
+                            <div class="transcript-headline" title="${escapeHtml(g.text)}">
+                                <span style="color: var(--primary); font-weight: 600;">#${idx + 1}:</span> ${escapeHtml(preview)}
+                            </div>
+                            <i class="fa-solid fa-chevron-down transcript-chevron" id="transcript-chevron-${idx}"></i>
+                        </div>
+                        <div class="transcript-body" id="transcript-body-${idx}">
+                            <div class="scene-badge-label">
+                                <i class="fa-solid fa-quote-left"></i> Spoken Lyrics & Dialogue
+                            </div>
+                            <p style="margin: 0; color: #cbd5e1; font-size: 0.83rem; line-height: 1.55; white-space: pre-wrap;">${escapeHtml(g.text)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join("");
         }
+    }
 
-        // Group consecutive segments with identical transcript text
-        const grouped = [];
-        transcriptSegments.forEach(s => {
-            const text = s.transcript_text.trim();
-            const last = grouped[grouped.length - 1];
-            if (last && last.text === text) {
-                last.end_time = s.end_time;
-            } else {
-                grouped.push({
-                    start_time: s.start_time,
-                    end_time: s.end_time,
-                    text: text
-                });
-            }
-        });
-
-        container.innerHTML = grouped.map((g, idx) => `
-            <div class="transcript-item" id="transcript-item-${idx}" data-start="${g.start_time}" data-end="${g.end_time}" onclick="seekVideo(${g.start_time})">
-                <button class="pill-time" title="Jump to ${formatSeconds(g.start_time)}">
-                    <i class="fa-solid fa-play" style="font-size: 0.5rem;"></i> ${formatSeconds(g.start_time)} - ${formatSeconds(g.end_time)}
-                </button>
-                <div class="transcript-dialogue">${escapeHtml(g.text)}</div>
-            </div>
-        `).join("");
-
-    } else if (currentActiveTab === 'visuals') {
+    // 2. RENDER VISUAL SCENES ACCORDION (Separate Scroller)
+    if (paneVisuals) {
         const visualSegments = segments.filter(s => s.visual_description && s.visual_description.trim().length > 0);
 
         if (visualSegments.length === 0) {
-            container.innerHTML = `
+            paneVisuals.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-camera fa-2x"></i>
                     <p>No visual scenes indexed for this clip.</p>
                 </div>
             `;
-            return;
-        }
-
-        container.innerHTML = visualSegments.map((s, idx) => {
-            let raw = s.visual_description.replace(/^At\s+\d+(\.\d+)?s\s+in\s+video:\s*/i, "").trim();
-            
-            // Extract one-line headline and detailed context
-            let headline = "";
-            let details = "";
-            
-            const headMatch = raw.match(/^(?:Headline:\s*)?(.+?)(?:\n\s*(?:Details:\s*)?([\s\S]+))?$/i);
-            if (headMatch && headMatch[2]) {
-                headline = headMatch[1].trim();
-                details = headMatch[2].trim();
-            } else {
-                const dotIdx = raw.indexOf(". ");
-                if (dotIdx > 8 && dotIdx < 110) {
-                    headline = raw.substring(0, dotIdx + 1).trim();
-                    details = raw.substring(dotIdx + 2).trim();
-                } else if (raw.length > 80) {
-                    headline = raw.substring(0, 75).trim() + "...";
-                    details = raw;
+        } else {
+            paneVisuals.innerHTML = visualSegments.map((s, idx) => {
+                let raw = s.visual_description.replace(/^At\s+\d+(\.\d+)?s\s+in\s+video:\s*/i, "").trim();
+                
+                let headline = "";
+                let details = "";
+                
+                const headMatch = raw.match(/^(?:Headline:\s*)?(.+?)(?:\n\s*(?:Details:\s*)?([\s\S]+))?$/i);
+                if (headMatch && headMatch[2]) {
+                    headline = headMatch[1].trim();
+                    details = headMatch[2].trim();
                 } else {
-                    headline = raw;
-                    details = raw;
+                    const dotIdx = raw.indexOf(". ");
+                    if (dotIdx > 8 && dotIdx < 110) {
+                        headline = raw.substring(0, dotIdx + 1).trim();
+                        details = raw.substring(dotIdx + 2).trim();
+                    } else if (raw.length > 80) {
+                        headline = raw.substring(0, 75).trim() + "...";
+                        details = raw;
+                    } else {
+                        headline = raw;
+                        details = raw;
+                    }
                 }
-            }
 
-            headline = headline.replace(/^Headline:\s*/i, "").trim();
-            details = details.replace(/^Details:\s*/i, "").trim();
+                headline = headline.replace(/^Headline:\s*/i, "").trim();
+                details = details.replace(/^Details:\s*/i, "").trim();
 
-            return `
-                <div class="scene-card" id="scene-card-${idx}" onclick="toggleSceneAccordion(${idx}, ${s.start_time})">
-                    <div class="scene-header">
-                        <button class="pill-time" title="Jump to ${formatSeconds(s.start_time)}" onclick="event.stopPropagation(); seekVideo(${s.start_time});">
-                            <i class="fa-solid fa-camera" style="font-size: 0.55rem;"></i> ${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}
-                        </button>
-                        <div class="scene-headline" title="${escapeHtml(headline)}">
-                            <span style="color: var(--primary); font-weight: 600;">Scene ${idx + 1}:</span> ${escapeHtml(headline)}
+                return `
+                    <div class="scene-card" id="scene-card-${idx}" onclick="toggleSceneAccordion(${idx}, ${s.start_time})">
+                        <div class="scene-header">
+                            <button class="pill-time" title="Jump to ${formatSeconds(s.start_time)}" onclick="event.stopPropagation(); seekVideo(${s.start_time});">
+                                <i class="fa-solid fa-camera" style="font-size: 0.55rem;"></i> ${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}
+                            </button>
+                            <div class="scene-headline" title="${escapeHtml(headline)}">
+                                <span style="color: var(--primary); font-weight: 600;">Scene ${idx + 1}:</span> ${escapeHtml(headline)}
+                            </div>
+                            <i class="fa-solid fa-chevron-down scene-chevron" id="scene-chevron-${idx}"></i>
                         </div>
-                        <i class="fa-solid fa-chevron-down scene-chevron" id="scene-chevron-${idx}"></i>
-                    </div>
-                    <div class="scene-body" id="scene-body-${idx}">
-                        <div class="scene-badge-label">
-                            <i class="fa-solid fa-eye"></i> Visual Context & Setting
+                        <div class="scene-body" id="scene-body-${idx}">
+                            <div class="scene-badge-label">
+                                <i class="fa-solid fa-eye"></i> Visual Context & Setting
+                            </div>
+                            <p style="margin: 0; color: #cbd5e1; font-size: 0.81rem; line-height: 1.5;">${escapeHtml(details || headline)}</p>
                         </div>
-                        <p style="margin: 0; color: #cbd5e1; font-size: 0.81rem; line-height: 1.5;">${escapeHtml(details || headline)}</p>
                     </div>
-                </div>
-            `;
-        }).join("");
+                `;
+            }).join("");
+        }
+    }
 
-    } else if (currentActiveTab === 'overview') {
-        container.innerHTML = `
+    // 3. RENDER OVERVIEW (Separate Scroller)
+    if (paneOverview) {
+        paneOverview.innerHTML = `
             <div class="overview-box">
                 <div style="font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
                     <i class="fa-solid fa-circle-nodes" style="color: var(--primary);"></i>
@@ -514,7 +551,7 @@ function handleVideoTimeUpdate() {
     if (!player) return;
 
     const currentTime = player.currentTime;
-    const items = document.querySelectorAll(".transcript-item");
+    const items = document.querySelectorAll(".transcript-card");
 
     items.forEach(item => {
         const start = parseFloat(item.getAttribute("data-start"));
@@ -524,51 +561,44 @@ function handleVideoTimeUpdate() {
             if (!item.classList.contains("active-speech")) {
                 items.forEach(i => i.classList.remove("active-speech"));
                 item.classList.add("active-speech");
-                // Smooth scroll into view
-                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
     });
 }
 
-function filterTranscript(query) {
-    const q = (query || "").trim().toLowerCase();
-    const items = document.querySelectorAll(".transcript-item");
-
-    items.forEach(item => {
-        const text = item.textContent.toLowerCase();
-        if (!q || text.includes(q)) {
-            item.style.display = "flex";
-        } else {
-            item.style.display = "none";
-        }
-    });
-}
-
-function copyTranscript() {
-    if (!currentVideoData || !currentVideoData.segments) return;
-
-    const transcriptSegments = currentVideoData.segments.filter(s => s.transcript_text && s.transcript_text.trim());
-    if (transcriptSegments.length === 0) {
-        alert("No transcript available to copy.");
-        return;
-    }
-
-    const fullText = transcriptSegments.map(s => `[${formatSeconds(s.start_time)} - ${formatSeconds(s.end_time)}] ${s.transcript_text.trim()}`).join("\n\n");
-    navigator.clipboard.writeText(fullText).then(() => {
-        const btn = document.getElementById("copyBtn");
-        btn.innerHTML = `<i class="fa-solid fa-check" style="color: #34d399;"></i> <span style="color: #34d399;">Copied!</span>`;
-        setTimeout(() => {
-            btn.innerHTML = `<i class="fa-regular fa-copy"></i> <span>Copy</span>`;
-        }, 2000);
-    });
-}
-
 function seekVideo(seconds) {
     const player = document.getElementById("videoPlayer");
-    if (player) {
-        player.currentTime = seconds;
-        player.play();
+    if (!player) return;
+
+    const targetTime = Math.max(0, parseFloat(seconds) || 0);
+
+    const applySeek = () => {
+        player.currentTime = targetTime;
+        const playPromise = player.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(err => {
+                console.debug("Autoplay prevented or interrupted:", err);
+            });
+        }
+    };
+
+    if (player.readyState >= 1) { // HAVE_METADATA or higher
+        applySeek();
+    } else {
+        const onLoaded = () => {
+            applySeek();
+            player.removeEventListener('loadedmetadata', onLoaded);
+        };
+        player.addEventListener('loadedmetadata', onLoaded);
+        player.load();
+    }
+}
+
+function toggleTranscriptAccordion(idx, seconds) {
+    seekVideo(seconds);
+    const card = document.getElementById(`transcript-card-${idx}`);
+    if (card) {
+        card.classList.toggle("expanded");
     }
 }
 
