@@ -149,7 +149,13 @@ async function deleteVideo(event, videoId) {
                 currentVideoId = null;
                 document.getElementById("videoPlayer").src = "";
                 document.getElementById("playerTitle").innerText = "Select a video";
-                document.getElementById("summaryText").innerHTML = "";
+                const panel = document.getElementById("summaryPanel");
+                if (panel) {
+                    panel.innerHTML = `
+                        <p style="font-weight: 600; margin-bottom: 0.3rem;">Video Summary & Transcript</p>
+                        <p id="summaryText" style="color: var(--text-muted);">Select or upload a video to inspect audio transcripts, visual perception, and timestamped segments.</p>
+                    `;
+                }
                 document.getElementById("chatMessages").innerHTML = '<div class="message assistant">Select or upload a video to begin analysis.</div>';
             }
             loadVideoList();
@@ -159,6 +165,14 @@ async function deleteVideo(event, videoId) {
     } catch (e) {
         console.error("Error deleting video:", e);
     }
+}
+
+function formatSeconds(sec) {
+    if (isNaN(sec) || sec === null || sec === undefined) return "00:00";
+    const totalSec = Math.floor(sec);
+    const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
+    const s = (totalSec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
 }
 
 async function selectVideo(videoId) {
@@ -175,10 +189,78 @@ async function selectVideo(videoId) {
         const details = await res.json();
 
         document.getElementById("playerTitle").innerText = details.filename;
-        document.getElementById("summaryText").innerHTML = `
-            <strong>Overview:</strong> ${details.summary || "Summary processing..."}<br>
-            <span style="color: var(--primary); font-size: 0.75rem;">${details.segments_count} time-indexed multimodal segments</span>
-        `;
+        const summaryPanel = document.getElementById("summaryPanel");
+
+        const segments = details.segments || [];
+        const transcriptSegments = segments.filter(
+            s => s.transcript_text && s.transcript_text.trim().length > 0
+        );
+
+        if (transcriptSegments.length > 0) {
+            // Group consecutive segments with identical transcript text for clean readability
+            const grouped = [];
+            transcriptSegments.forEach(s => {
+                const text = s.transcript_text.trim();
+                const last = grouped[grouped.length - 1];
+                if (last && last.text === text) {
+                    last.end_time = s.end_time;
+                } else {
+                    grouped.push({
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        text: text
+                    });
+                }
+            });
+
+            const transcriptHtml = grouped.map(g => `
+                <div class="transcript-row">
+                    <button class="transcript-time" onclick="seekVideo(${g.start_time})" title="Jump video to ${formatSeconds(g.start_time)}">
+                        <i class="fa-solid fa-play" style="font-size: 0.55rem;"></i> ${formatSeconds(g.start_time)} - ${formatSeconds(g.end_time)}
+                    </button>
+                    <span class="transcript-text">${escapeHtml(g.text)}</span>
+                </div>
+            `).join("");
+
+            summaryPanel.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                    <div style="font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 0.4rem;">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span>Video Transcript (Audio to Text)</span>
+                    </div>
+                    <span class="badge badge-completed" style="font-size: 0.7rem;">
+                        <i class="fa-solid fa-check"></i> Audio Available
+                    </span>
+                </div>
+                <div class="transcript-list">
+                    ${transcriptHtml}
+                </div>
+                <details style="margin-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.45rem; font-size: 0.8rem;">
+                    <summary style="cursor: pointer; font-weight: 500; color: #94a3b8;">
+                        <i class="fa-solid fa-video"></i> About Video (Visual Overview)
+                    </summary>
+                    <p style="margin-top: 0.35rem; line-height: 1.4; color: #cbd5e1;">${escapeHtml(details.summary || "Visual scene description available.")}</p>
+                    <span style="color: var(--primary); font-size: 0.72rem; margin-top: 0.2rem; display: block;">${details.segments_count} time-indexed multimodal segments</span>
+                </details>
+            `;
+        } else {
+            // No audio speech transcript available - display About Video visual summary
+            summaryPanel.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                    <div style="font-weight: 600; color: #f8fafc; display: flex; align-items: center; gap: 0.4rem;">
+                        <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i>
+                        <span>About Video (Visual Overview)</span>
+                    </div>
+                    <span class="badge badge-queued" style="font-size: 0.7rem;">No Spoken Audio</span>
+                </div>
+                <p style="color: #cbd5e1; line-height: 1.45; font-size: 0.84rem; margin-top: 0.35rem;">
+                    ${escapeHtml(details.summary || "Summary processing...")}
+                </p>
+                <span style="color: var(--primary); font-size: 0.72rem; margin-top: 0.4rem; display: block;">
+                    ${details.segments_count} time-indexed multimodal segments
+                </span>
+            `;
+        }
 
         // Clear chat
         const chatMessages = document.getElementById("chatMessages");

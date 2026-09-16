@@ -50,16 +50,24 @@ class AudioTranscriber:
         # Upload audio file to Gemini File API
         uploaded_file = await asyncio.to_thread(genai.upload_file, str(audio_path), mime_type="audio/wav")
         
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        prompt = (
-            "You are an expert speech recognition system. Transcribe the audio precisely. "
-            "Output your response strictly as a valid JSON array of objects with keys: "
-            "'start' (float seconds), 'end' (float seconds), 'text' (transcribed string). "
-            "Example: [{\"start\": 0.0, \"end\": 3.5, \"text\": \"Welcome to the lecture.\"}]"
-        )
+        candidate_models = []
+        for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+            if m and m not in candidate_models:
+                candidate_models.append(m)
 
-        response = await asyncio.to_thread(model.generate_content, [uploaded_file, prompt])
-        raw_text = response.text.strip()
+        raw_text = None
+        for model_name in candidate_models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.to_thread(model.generate_content, [uploaded_file, prompt])
+                if response and response.text:
+                    raw_text = response.text.strip()
+                    break
+            except Exception as err:
+                logger.warning(f"Audio transcription with {model_name} failed: {err}")
+
+        if not raw_text:
+            raise RuntimeError("All candidate models failed audio transcription")
         
         # Clean potential markdown formatting
         if raw_text.startswith("```json"):

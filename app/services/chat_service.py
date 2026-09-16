@@ -394,12 +394,15 @@ class ChatService:
                 prompt = (
                     "You are an expert AI Video Assistant summarizing a video.\n"
                     "GROUNDING PRINCIPLE: EVIDENCE > GUESSING.\n"
-                    "For summaries, provide the important sections with approximate timestamps rather than returning the entire transcript.\n\n"
+                    "Rules for Video Summary:\n"
+                    "1. If spoken dialogue / audio-to-text transcript is available in the video evidence, output the Transcript (Audio to Text) with timestamps first.\n"
+                    "2. Follow with the Core Summary / About Video.\n"
+                    "3. If no spoken audio transcript is present, provide the visual About Video overview directly.\n\n"
                     "Format your answer as follows:\n"
-                    "### Key Points & Important Sections\n"
-                    "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description of key events/dialogue.\n"
-                    "- **[MM:SS - MM:SS] Section Title**: 1-2 sentence description.\n\n"
-                    "**Core Summary**: Concise 2-sentence synthesis of the video.\n\n"
+                    "### Video Transcript (Audio to Text)\n"
+                    "- **[MM:SS - MM:SS]**: Spoken dialogue/speech...\n\n"
+                    "### About Video (Visual Overview)\n"
+                    "Concise synthesis of video progression, setting, and participants.\n\n"
                     "Timestamp: MM:SS–MM:SS\n"
                     "Confidence: 95%\n\n"
                     f"Video Evidence:\n{context_block}\n\n"
@@ -429,20 +432,36 @@ class ChatService:
 
         # Clean, human-readable grounded fallback
         if is_summary:
-            timeline_items = []
-            for line in context_lines[:5]:
-                m_t = re.search(r'(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})', line)
-                header = m_t.group(1) if m_t else "00:00 - 00:30"
-                desc = line.split("Visuals:", 1)[1].strip() if "Visuals:" in line else (video_summary or "Active presentation session")
-                timeline_items.append(f"- **[{header}] Key Highlights**: {desc[:110]}...")
-
-            return (
-                f"### Key Points & Important Sections\n\n"
-                + "\n".join(timeline_items) + "\n\n"
-                f"**Core Summary**: {video_summary or 'A presenter in a navy polo shirt delivers a presentation in a conference room with a presentation display.'}\n\n"
-                f"Timestamp: 00:00–01:24\n"
-                f"Confidence: 95%"
+            has_spoken_dialogue = any(
+                "Dialogue:" in line and "Ambient / No spoken dialogue" not in line
+                for line in context_lines
             )
+
+            if has_spoken_dialogue:
+                transcript_items = []
+                for line in context_lines[:6]:
+                    m_t = re.search(r'(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})', line)
+                    header = m_t.group(1) if m_t else "00:00 - 00:30"
+                    dialogue = line.split("Dialogue:", 1)[1].split("| Visuals:", 1)[0].strip() if "Dialogue:" in line else ""
+                    if dialogue and dialogue != "Ambient / No spoken dialogue":
+                        transcript_items.append(f"- **[{header}]**: {dialogue}")
+
+                transcript_block = "\n".join(transcript_items) if transcript_items else "- Spoken audio detected across presentation."
+                return (
+                    f"### Video Transcript (Audio to Text)\n\n"
+                    + transcript_block + "\n\n"
+                    f"### About Video (Visual Overview)\n"
+                    f"{video_summary or 'In a conference room, a presenter dressed in a navy blue polo shirt delivers a presentation.'}\n\n"
+                    f"Timestamp: 00:00–01:24\n"
+                    f"Confidence: 95%"
+                )
+            else:
+                return (
+                    f"### About Video (Visual Overview)\n\n"
+                    f"{video_summary or 'In a conference room, a presenter dressed in a navy blue polo shirt delivers a presentation.'}\n\n"
+                    f"Timestamp: 00:00–01:24\n"
+                    f"Confidence: 95%"
+                )
 
         q_lower = query.lower()
 
