@@ -137,11 +137,25 @@ class UrlDownloader:
         if self.ffmpeg_path:
             ydl_opts['ffmpeg_location'] = self.ffmpeg_path
 
+        # Support optional cookies.txt if user exports authenticated session cookies
+        cookie_file = Path("cookies.txt")
+        if cookie_file.exists():
+            ydl_opts['cookiefile'] = str(cookie_file.resolve())
+
         info = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
         except Exception as yt_err:
+            err_str = str(yt_err)
+            if "sharepoint" in url_l and ("cookie" in err_str.lower() or "login" in err_str.lower() or "403" in err_str):
+                raise ValueError(
+                    "This SharePoint / Teams recording requires Microsoft 365 Single Sign-On (SSO) login. "
+                    "External services cannot log into your private company Microsoft account directly.\n\n"
+                    "👉 How to analyze this meeting recording in 2 steps:\n"
+                    "1. On the SharePoint page, click 'Download' at the top to save the .mp4 file to your computer.\n"
+                    "2. Switch to the 'Local File' tab and drop the file to start instant analysis!"
+                )
             logger.warning(f"yt-dlp could not process URL '{url}' directly ({yt_err}). Falling back to stream capture...")
             # Fallback to direct stream/file capture via FFmpeg (for direct camera feeds, custom IP cams, or CDN file links)
             try:
