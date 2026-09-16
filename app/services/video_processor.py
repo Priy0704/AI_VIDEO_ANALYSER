@@ -100,7 +100,7 @@ class VideoProcessor:
         Extracts 1 frame every interval_sec (default 3.0s) along the timeline.
         Guarantees predictable compute, no memory spikes, and uniform video coverage.
         """
-        interval = interval_sec or settings.FRAME_SAMPLE_INTERVAL_SEC
+        base_interval = interval_sec or settings.FRAME_SAMPLE_INTERVAL_SEC
         output_dir = settings.KEYFRAME_DIR / video_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +113,13 @@ class VideoProcessor:
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
             duration = total_frames / fps if fps > 0 else 0.0
+
+            # For long videos (>5 mins / 300s, up to 30 mins), adapt interval to avoid excessive frames and disk I/O
+            # while guaranteeing uniform coverage (~40-50 keyframes across the timeline)
+            if duration > 300.0:
+                interval = max(base_interval, duration / 50.0)
+            else:
+                interval = base_interval
 
             # Calculate timestamps to sample: 0.0, interval, 2*interval...
             current_time = 0.0

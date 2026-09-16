@@ -34,9 +34,9 @@ class VisionDescriber:
         # If Gemini is configured, use batched multimodal perception
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             try:
-                # Select evenly spaced samples across the timeline (up to 30 frames to guarantee full coverage without exceeding rate limits)
+                # Select evenly spaced samples across the timeline (up to 50 frames to guarantee full coverage for up to 30 min videos)
                 total_samples = len(frame_samples)
-                target_count = min(30, total_samples)
+                target_count = min(50, total_samples)
                 if total_samples > target_count:
                     step = total_samples / target_count
                     selected_samples = [frame_samples[int(i * step)] for i in range(target_count)]

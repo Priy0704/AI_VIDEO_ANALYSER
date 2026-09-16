@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.6-flash"
 
     # Ingestion & Video Pipeline
-    MAX_VIDEO_SIZE_MB: int = 1024
+    MAX_VIDEO_SIZE_MB: int = 51200  # Up to 50 GB
     ALLOWED_EXTENSIONS: set[str] = {".mp4", ".mov", ".mkv", ".avi"}
     FRAME_SAMPLE_INTERVAL_SEC: float = 3.0
     MAX_CONCURRENT_WORKERS: int = 2

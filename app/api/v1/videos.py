@@ -1,4 +1,5 @@
 import os
+import mimetypes
 import shutil
 from pathlib import Path
 from typing import List
@@ -55,8 +56,10 @@ async def upload_video(
     total_bytes = 0
     too_large = False
     try:
+        # Stream in 8MB chunks for fast I/O throughput with large (up to 50 GB) videos
+        upload_chunk_size = 8 * 1024 * 1024
         with open(saved_path, "wb") as buffer:
-            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+            while chunk := await file.read(upload_chunk_size):
                 total_bytes += len(chunk)
                 size_mb = total_bytes / (1024 * 1024)
                 if size_mb > settings.MAX_VIDEO_SIZE_MB:
@@ -315,6 +318,8 @@ async def stream_video(
     file_size = path.stat().st_size
     range_header = request.headers.get("range")
 
+    media_type = mimetypes.guess_type(str(path))[0] or "video/mp4"
+
     if range_header:
         # Parse byte range: "bytes=start-end"
         byte1, byte2 = 0, None
@@ -331,7 +336,7 @@ async def stream_video(
                 f.seek(byte1)
                 remaining = length
                 while remaining > 0:
-                    chunk_size = min(64 * 1024, remaining)
+                    chunk_size = min(256 * 1024, remaining)
                     data = f.read(chunk_size)
                     if not data:
                         break
@@ -342,17 +347,17 @@ async def stream_video(
             "Content-Range": f"bytes {byte1}-{byte1 + length - 1}/{file_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(length),
-            "Content-Type": "video/mp4",
+            "Content-Type": media_type,
         }
         return StreamingResponse(iterfile(), status_code=206, headers=headers)
 
     def iterfile_full():
         with open(path, "rb") as f:
-            while chunk := f.read(64 * 1024):
+            while chunk := f.read(256 * 1024):
                 yield chunk
 
     return StreamingResponse(
         iterfile_full(),
-        media_type="video/mp4",
+        media_type=media_type,
         headers={"Content-Length": str(file_size), "Accept-Ranges": "bytes"}
     )

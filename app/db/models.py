@@ -6,6 +6,7 @@ from sqlalchemy import (
     String,
     Float,
     Integer,
+    BigInteger,
     Text,
     DateTime,
     ForeignKey,
@@ -38,7 +39,7 @@ class Video(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     filename = Column(String(255), nullable=False)
     file_path = Column(String(1024), nullable=False)
-    file_size_bytes = Column(Integer, nullable=False, default=0)
+    file_size_bytes = Column(BigInteger, nullable=False, default=0)
     duration_seconds = Column(Float, nullable=True, default=0.0)
     status = Column(SQLEnum(VideoStatus), nullable=False, default=VideoStatus.QUEUED)
     progress_pct = Column(Integer, nullable=False, default=0)

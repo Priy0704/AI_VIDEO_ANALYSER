@@ -27,7 +27,7 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     video_id = res.json()["video_id"]
 
     # Wait for video processing
-    for _ in range(15):
+    for _ in range(30):
         await asyncio.sleep(1)
         s = (await async_client.get(f"/api/v1/videos/{video_id}/status")).json()
         if s["status"] == "completed":
