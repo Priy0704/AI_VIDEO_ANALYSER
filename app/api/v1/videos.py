@@ -89,14 +89,14 @@ async def upload_video(
     "/from-url",
     response_model=VideoUploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Download and ingest a video from YouTube or web URL"
+    summary="Download and ingest a video from YouTube, Zoom, meeting recordings, camera streams, or web URLs"
 )
 async def ingest_video_from_url(
     payload: VideoUrlRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Downloads a video from YouTube or a supported web URL using yt-dlp,
+    Downloads and ingests a video from any URL (YouTube, Zoom/Meeting recordings, Camera RTSP/HTTP streams, or direct files),
     saves the MP4 stream, creates a database record, and queues multimodal processing.
     """
     downloader = UrlDownloader(download_dir=settings.UPLOAD_DIR)
@@ -137,7 +137,7 @@ async def ingest_video_from_url(
         video_id=video.id,
         filename=video.filename,
         status=video.status,
-        message=f"YouTube video '{download_info['title']}' fetched and queued for processing."
+        message=f"Video '{download_info['title']}' fetched and queued for multimodal processing."
     )
 
 

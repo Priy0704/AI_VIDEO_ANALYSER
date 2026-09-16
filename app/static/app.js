@@ -94,13 +94,14 @@ async function importFromUrl() {
     const url = (input.value || "").trim();
 
     if (!url) {
-        alert("Please enter a valid YouTube or video URL.");
+        alert("Please enter a valid video, meeting, or camera stream URL.");
         input.focus();
         return;
     }
 
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        alert("URL must begin with http:// or https://");
+    const urlLower = url.toLowerCase();
+    if (!urlLower.startsWith("http://") && !urlLower.startsWith("https://") && !urlLower.startsWith("rtsp://") && !urlLower.startsWith("rtmp://")) {
+        alert("URL must begin with http://, https://, or rtsp:// (for camera streams)");
         input.focus();
         return;
     }

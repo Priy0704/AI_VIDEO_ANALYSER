@@ -3,6 +3,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import uuid
 from pathlib import Path
 from typing import Dict, Any, Optional
 import yt_dlp
@@ -29,7 +31,7 @@ def _get_ffmpeg_executable() -> Optional[str]:
 
 
 class UrlDownloader:
-    """Service to fetch and download videos from YouTube and supported web URLs via yt-dlp."""
+    """Service to fetch and download videos from any URL: YouTube, Zoom/Meeting recordings, Camera RTSP/HTTP feeds, and direct files."""
 
     def __init__(self, download_dir: Path):
         self.download_dir = download_dir
@@ -40,10 +42,77 @@ class UrlDownloader:
         """Sanitize filename to avoid OS path conflicts."""
         return re.sub(r'[^\w\-_\. ]', '_', filename).strip()
 
+    def _download_via_ffmpeg(self, url: str) -> Dict[str, Any]:
+        """Capture or download a video from camera feeds (RTSP/RTMP), HLS streams, or direct video file URLs using FFmpeg."""
+        ffmpeg_bin = self.ffmpeg_path or "ffmpeg"
+        unique_id = uuid.uuid4().hex[:8]
+        out_name = f"stream_{unique_id}.mp4"
+        out_path = self.download_dir / out_name
+
+        logger.info(f"Attempting direct FFmpeg stream capture for URL: {url}")
+        cmd_copy = [
+            ffmpeg_bin, "-y",
+            "-i", url,
+            "-t", "3600",
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(out_path)
+        ]
+
+        try:
+            res = subprocess.run(cmd_copy, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            if res.returncode != 0 or not out_path.exists() or os.path.getsize(out_path) == 0:
+                # Transcode if copy failed due to stream codecs
+                cmd_transcode = [
+                    ffmpeg_bin, "-y",
+                    "-i", url,
+                    "-t", "3600",
+                    "-c:v", "libx264",
+                    "-preset", "veryfast",
+                    "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    str(out_path)
+                ]
+                subprocess.run(cmd_transcode, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        except Exception as e:
+            logger.error(f"FFmpeg stream capture error for '{url}': {e}")
+            raise ValueError(f"Failed to capture video stream from URL: {e}")
+
+        if not out_path.exists() or os.path.getsize(out_path) == 0:
+            raise ValueError(f"Could not retrieve a playable video stream from: {url}")
+
+        file_size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        duration = 0.0
+        try:
+            import cv2
+            cap = cv2.VideoCapture(str(out_path))
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+                frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0
+                duration = frames / fps if fps > 0 else 0.0
+                cap.release()
+        except Exception as e:
+            logger.debug(f"Could not probe duration via cv2: {e}")
+
+        clean_title = Path(url.split("?")[0]).stem or f"Stream_{unique_id}"
+        return {
+            "file_path": str(out_path.resolve()),
+            "filename": out_name,
+            "title": clean_title,
+            "duration_seconds": round(duration, 2),
+            "file_size_mb": round(file_size_mb, 2),
+            "thumbnail_url": None
+        }
+
     def _sync_download(self, url: str) -> Dict[str, Any]:
-        """Synchronous worker function to download video with yt-dlp."""
-        if not (url.startswith("http://") or url.startswith("https://")):
-            raise ValueError("Invalid URL: must start with http:// or https://")
+        """Synchronous worker function supporting any video URL: web platforms, meeting links, camera feeds, or direct files."""
+        url_l = url.strip().lower()
+        if not (url_l.startswith("http://") or url_l.startswith("https://") or url_l.startswith("rtsp://") or url_l.startswith("rtmp://")):
+            raise ValueError("Invalid URL: must start with http://, https://, or rtsp://")
+
+        # Directly use FFmpeg for RTSP/RTMP security and IP camera streams
+        if url_l.startswith("rtsp://") or url_l.startswith("rtmp://"):
+            return self._download_via_ffmpeg(url)
 
         ydl_opts: Dict[str, Any] = {
             'format': 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -68,18 +137,23 @@ class UrlDownloader:
         if self.ffmpeg_path:
             ydl_opts['ffmpeg_location'] = self.ffmpeg_path
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-            except yt_dlp.utils.DownloadError as de:
-                logger.error(f"yt-dlp download failed for URL '{url}': {de}")
-                raise ValueError(f"Failed to download video from URL: {str(de)}")
-            except Exception as e:
-                logger.error(f"Unexpected error downloading URL '{url}': {e}")
-                raise ValueError(f"Failed to process video URL: {str(e)}")
+        except Exception as yt_err:
+            logger.warning(f"yt-dlp could not process URL '{url}' directly ({yt_err}). Falling back to stream capture...")
+            # Fallback to direct stream/file capture via FFmpeg (for direct camera feeds, custom IP cams, or CDN file links)
+            try:
+                return self._download_via_ffmpeg(url)
+            except Exception:
+                raise ValueError(f"Failed to download video from URL: {str(yt_err)}")
 
         if not info:
-            raise ValueError("No video metadata could be extracted from URL.")
+            try:
+                return self._download_via_ffmpeg(url)
+            except Exception:
+                raise ValueError("No video metadata could be extracted from URL.")
 
         downloaded_file = ydl.prepare_filename(info)
         # In case postprocessor changed extension to .mp4
@@ -97,7 +171,7 @@ class UrlDownloader:
         filename = Path(downloaded_file).name
 
         return {
-            "file_path": downloaded_file,
+            "file_path": str(Path(downloaded_file).resolve()),
             "filename": filename,
             "title": title,
             "duration_seconds": duration,
@@ -106,5 +180,5 @@ class UrlDownloader:
         }
 
     async def download_video(self, url: str) -> Dict[str, Any]:
-        """Asynchronously download video from URL without blocking FastAPI event loop."""
+        """Asynchronously download video from any supported URL without blocking FastAPI event loop."""
         return await asyncio.to_thread(self._sync_download, url)

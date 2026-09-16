@@ -980,8 +980,8 @@
                     <span>Local File</span>
                 </button>
                 <button class="mode-btn" id="btnModeUrl" onclick="switchUploadMode('url')">
-                    <i class="fa-brands fa-youtube" style="color: #ef4444;"></i>
-                    <span>YouTube / URL</span>
+                    <i class="fa-solid fa-link" style="color: var(--primary);"></i>
+                    <span>URL (YouTube, Zoom, Camera)</span>
                 </button>
             </div>
 
@@ -991,15 +991,15 @@
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                 </div>
                 <p style="font-size: 0.85rem; font-weight: 600; color: #f1f5f9;">Upload Video(s)</p>
-                <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Single or batch upload (.mp4, .mov)</p>
+                <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Single or batch upload (.mp4, .mov, .mkv)</p>
                 <input type="file" id="fileInput" accept=".mp4,.mov,.mkv,.avi" multiple style="display: none;">
             </div>
 
-            <!-- Pane 2: YouTube / URL Input -->
+            <!-- Pane 2: Universal URL Input -->
             <div class="url-input-pane" id="paneUrl" style="display: none;">
                 <div class="url-box-wrap">
-                    <i class="fa-brands fa-youtube" style="color: #ef4444; font-size: 1.1rem;"></i>
-                    <input type="url" id="videoUrlInput" placeholder="Paste YouTube link (e.g. https://youtu.be/...)" onkeypress="handleUrlKeyPress(event)">
+                    <i class="fa-solid fa-video" style="color: var(--primary); font-size: 1.05rem;"></i>
+                    <input type="url" id="videoUrlInput" placeholder="Paste link: YouTube, Zoom recording, Camera RTSP/HTTP stream, or MP4 URL..." onkeypress="handleUrlKeyPress(event)">
                 </div>
                 <button class="btn-fetch-url" id="btnFetchUrl" onclick="importFromUrl()">
                     <i class="fa-solid fa-bolt"></i>
@@ -1126,6 +1126,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=3.3"></script>
+    <script src="/static/app.js?v=3.4"></script>
 </body>
 </html>
