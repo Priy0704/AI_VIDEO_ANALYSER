@@ -326,146 +326,229 @@ class ChatService:
         session = await self.get_or_create_session(db, video.id, session_id)
         q_lower = query.lower()
 
-        # Subjective / Intent / Ambiguous emotion detector (Multilingual: English, Hindi, Marathi)
-        sensitive_patterns = [
-            r"\b(angry|anger|mad|furious|upset|irritated|annoyed|गुस्सा|नाराज|राग|चिडलेला|क्रोधी)\b",
-            r"\b(attack|attacked|attacking|assault|assaulted|हमला|हल्ला)\b",
-            r"\b(fight|fighting|fought|brawl|punch|punching|hit|hitting|झगड़ा|लड़ाई|भांडण|मारामारी)\b",
-            r"\b(aggressive|aggressively|aggression|hostile|hostility|आक्रामक|आक्रमक)\b",
-            r"\b(argue|argued|arguing|argument|quarrel|dispute|बहस|वाद|तकरार)\b",
-            r"\b(intentionally|on purpose|deliberate|deliberately|malicious|maliciously|जानबूझकर|मुद्दाम|हेतू)\b",
-            r"\b(threat|threaten|threatened|threatening|धमकी)\b",
-            r"\b(harass|harassed|harassing|harassment|सताना|छेडछाड|त्रास)\b"
-        ]
-        is_sensitive_query = any(re.search(pat, q_lower) for pat in sensitive_patterns)
-
-        # Retrieve relevant segments
-        scored_segments = await self.retrieve_relevant_segments(
-            db, video.id, query, video_duration=video.duration_seconds
-        )
-
-        citations: List[Citation] = []
-        context_lines: List[str] = []
-
-        is_summary_query = any(
-            w in q_lower for w in [
-                "summarize", "summary", "key points", "overview", "what is this video about",
-                "tell me about this video", "what happened in this video", "explain the video"
-            ]
-        )
-
-        # BRANCH 1: Ambiguous / Subjective interpretation query workflow (HITL Required)
-        if is_sensitive_query:
-            confidence_score = 0.68
-            requires_hitl = True
-            time_str = "00:00–00:30"
-            if scored_segments:
-                seg, _ = scored_segments[0]
-                time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
-                citations.append(
-                    Citation(
-                        start_time=seg.start_time,
-                        end_time=seg.end_time,
-                        timestamp_formatted=time_str,
-                        snippet=(seg.visual_description or "")[:120],
-                        relevance_score=0.68
-                    )
+        # Check for Human-In-The-Loop (HITL) verified reviews for this video
+        stmt_hitl = (
+            select(HITLReview)
+            .where(
+                and_(
+                    HITLReview.video_id == video.id,
+                    HITLReview.status.in_([HITLStatus.APPROVED, HITLStatus.CORRECTED])
                 )
-            answer = (
-                "Human review required. The available video evidence is ambiguous.\n\n"
-                f"Timestamp:\n{time_str}\n\n"
-                "Confidence:\n68%\n\n"
-                "Status:\nHITL Required"
             )
+            .order_by(HITLReview.reviewed_at.desc())
+        )
+        verified_hitl_reviews = (await db.execute(stmt_hitl)).scalars().all()
 
-        # BRANCH 2: Summarization workflow (entire video, first half, second half, key points)
-        elif is_summary_query:
-            confidence_score = 0.95
+        # Check if the query directly matches an already verified human review
+        matched_hitl = None
+        q_stopwords = {
+            "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
+            "the", "and", "is", "are", "was", "were", "this", "that", "there", "about",
+            "did", "does", "been", "being", "have", "has", "had", "for", "with", "from"
+        }
+        q_clean = re.sub(r'[^a-zA-Z0-9\s]', '', q_lower).strip()
+        q_tokens = set(w for w in q_clean.split() if len(w) > 2 and w not in q_stopwords)
+
+        for vr in verified_hitl_reviews:
+            vr_q_lower = vr.query.lower()
+            vr_clean = re.sub(r'[^a-zA-Z0-9\s]', '', vr_q_lower).strip()
+            if q_clean == vr_clean or q_lower in vr_q_lower or vr_q_lower in q_lower:
+                matched_hitl = vr
+                break
+            vr_tokens = set(w for w in vr_clean.split() if len(w) > 2 and w not in q_stopwords)
+            if q_tokens and vr_tokens:
+                overlap = len(q_tokens.intersection(vr_tokens)) / max(len(q_tokens), len(vr_tokens))
+                if overlap >= 0.45:
+                    matched_hitl = vr
+                    break
+
+        if matched_hitl:
+            confidence_score = 1.0
             requires_hitl = False
-            t_start, t_end = self.parse_temporal_scope(query, video.duration_seconds)
-            if t_start is not None and t_end is not None:
-                stmt = select(VideoSegment).where(
-                    and_(
-                        VideoSegment.video_id == video.id,
-                        VideoSegment.start_time <= t_end,
-                        VideoSegment.end_time >= t_start
-                    )
-                ).order_by(VideoSegment.start_time)
+            verified_ans = (
+                matched_hitl.corrected_answer 
+                if (matched_hitl.status == HITLStatus.CORRECTED and matched_hitl.corrected_answer) 
+                else matched_hitl.ai_answer
+            )
+            evidence_str = (
+                f"Human reviewer verification: {matched_hitl.reviewer_notes}"
+                if matched_hitl.reviewer_notes
+                else "Verified and approved by human auditor."
+            )
+            time_m = re.search(r'Timestamp:\s*([0-9:–\-]+)', matched_hitl.ai_answer)
+            time_str = time_m.group(1).replace(" - ", "–") if time_m else "00:00–00:10"
+            clean_ans = re.sub(r'^(?:Answer:\s*)+', '', verified_ans, flags=re.IGNORECASE).strip()
+            if "Timestamp:" in clean_ans or "Confidence:" in clean_ans:
+                answer = clean_ans
             else:
-                stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
-
-            all_segs = (await db.execute(stmt)).scalars().all()
-            if not all_segs:
-                all_segs = [s for s, _ in scored_segments] if scored_segments else (await db.execute(select(VideoSegment).where(VideoSegment.video_id == video.id))).scalars().all()
-
+                answer = (
+                    f"Answer:\n{clean_ans}\n\n"
+                    f"Timestamp:\n{time_str}\n\n"
+                    f"Confidence:\n100% (Human Verified)\n\n"
+                    f"Supporting Evidence:\n{evidence_str}"
+                )
             citations = [
                 Citation(
-                    start_time=s.start_time,
-                    end_time=s.end_time,
-                    timestamp_formatted=f"{format_seconds_to_timestamp(s.start_time)}–{format_seconds_to_timestamp(s.end_time)}",
-                    snippet=(s.visual_description or s.combined_text or "")[:120].replace("\n", " "),
-                    relevance_score=0.95
+                    start_time=0.0,
+                    end_time=video.duration_seconds or 10.0,
+                    timestamp_formatted=time_str,
+                    snippet=evidence_str[:120],
+                    relevance_score=1.0
                 )
-                for s in all_segs[:8]
             ]
-            context_lines = [
-                f"Timestamp [{c.timestamp_formatted}]: Dialogue: {s.transcript_text or 'No spoken dialogue'} | Visuals: {s.visual_description}"
-                for c, s in zip(citations, all_segs[:8])
-            ]
-            answer = await self._generate_grounded_answer(
-                query, context_lines, video.summary, is_summary=True, confidence_score=0.95
-            )
-
-        # BRANCH 3: Not Found (Requested content does not exist in video - NO timestamp!)
-        elif not scored_segments or scored_segments[0][1] < settings.CONFIDENCE_THRESHOLD:
-            confidence_score = 0.35
-            requires_hitl = False
-            answer = (
-                "I don't know. This content is not present in the video.\n\n"
-                "Status:\nNot Found"
-            )
-            citations = []
-
-        # BRANCH 4: Grounded Multimodal Answer (Sufficient evidence available)
         else:
-            requires_hitl = False
-            confidence_score = float(scored_segments[0][1])
-            for seg, score in scored_segments:
-                time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
-                snippet = (seg.visual_description or seg.combined_text or "")[:160].replace("\n", " ")
-                citations.append(
-                    Citation(
-                        start_time=seg.start_time,
-                        end_time=seg.end_time,
-                        timestamp_formatted=time_str,
-                        snippet=snippet,
-                        relevance_score=score
-                    )
-                )
-                context_lines.append(
-                    f"Timestamp [{time_str}]:\n"
-                    f"Dialogue / Speech: {seg.transcript_text or 'No spoken dialogue'}\n"
-                    f"Visuals & Scene: {seg.visual_description or 'No visual details'}"
-                )
+            # Subjective / Intent / Ambiguous emotion detector (Multilingual: English, Hindi, Marathi)
+            sensitive_patterns = [
+                r"\b(angry|anger|mad|furious|upset|irritated|annoyed|गुस्सा|नाराज|राग|चिडलेला|क्रोधी)\b",
+                r"\b(attack|attacked|attacking|assault|assaulted|हमला|हल्ला)\b",
+                r"\b(fight|fighting|fought|brawl|punch|punching|hit|hitting|झगड़ा|लड़ाई|भांडण|मारामारी)\b",
+                r"\b(aggressive|aggressively|aggression|hostile|hostility|आक्रामक|आक्रमक)\b",
+                r"\b(argue|argued|arguing|argument|quarrel|dispute|बहस|वाद|तकरार)\b",
+                r"\b(intentionally|on purpose|deliberate|deliberately|malicious|maliciously|जानबूझकर|मुद्दाम|हेतू)\b",
+                r"\b(threat|threaten|threatened|threatening|धमकी)\b",
+                r"\b(harass|harassed|harassing|harassment|सताना|छेडछाड|त्रास)\b"
+            ]
+            is_sensitive_query = any(re.search(pat, q_lower) for pat in sensitive_patterns)
 
-            # Extract visual frame from video file if present on disk
-            frame_image = None
-            if video.file_path and Path(video.file_path).exists():
-                exact_t = self.parse_exact_timestamp(query)
-                if exact_t is not None:
-                    frame_t = exact_t
-                elif scored_segments:
-                    # Pick middle timestamp of the highest scoring segment
-                    best_seg = scored_segments[0][0]
-                    frame_t = (best_seg.start_time + best_seg.end_time) / 2.0
-                else:
-                    frame_t = 1.0
-                frame_image = self._extract_frame_at_timestamp(Path(video.file_path), frame_t)
-
-            answer = await self._generate_grounded_answer(
-                query, context_lines, video.summary, is_summary=False, confidence_score=confidence_score,
-                frame_image=frame_image
+            # Retrieve relevant segments
+            scored_segments = await self.retrieve_relevant_segments(
+                db, video.id, query, video_duration=video.duration_seconds
             )
+
+            citations: List[Citation] = []
+            context_lines: List[str] = []
+
+            is_summary_query = any(
+                w in q_lower for w in [
+                    "summarize", "summary", "key points", "overview", "what is this video about",
+                    "tell me about this video", "what happened in this video", "explain the video"
+                ]
+            )
+
+            # BRANCH 1: Ambiguous / Subjective interpretation query workflow (HITL Required)
+            if is_sensitive_query:
+                confidence_score = 0.68
+                requires_hitl = True
+                time_str = "00:00–00:30"
+                if scored_segments:
+                    seg, _ = scored_segments[0]
+                    time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+                    citations.append(
+                        Citation(
+                            start_time=seg.start_time,
+                            end_time=seg.end_time,
+                            timestamp_formatted=time_str,
+                            snippet=(seg.visual_description or "")[:120],
+                            relevance_score=0.68
+                        )
+                    )
+                answer = (
+                    "Human review required. The available video evidence is ambiguous.\n\n"
+                    f"Timestamp:\n{time_str}\n\n"
+                    "Confidence:\n68%\n\n"
+                    "Status:\nHITL Required"
+                )
+
+            # BRANCH 2: Summarization workflow (entire video, first half, second half, key points)
+            elif is_summary_query:
+                confidence_score = 0.95
+                requires_hitl = False
+                t_start, t_end = self.parse_temporal_scope(query, video.duration_seconds)
+                if t_start is not None and t_end is not None:
+                    stmt = select(VideoSegment).where(
+                        and_(
+                            VideoSegment.video_id == video.id,
+                            VideoSegment.start_time <= t_end,
+                            VideoSegment.end_time >= t_start
+                        )
+                    ).order_by(VideoSegment.start_time)
+                else:
+                    stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
+
+                all_segs = (await db.execute(stmt)).scalars().all()
+                if not all_segs:
+                    all_segs = [s for s, _ in scored_segments] if scored_segments else (await db.execute(select(VideoSegment).where(VideoSegment.video_id == video.id))).scalars().all()
+
+                citations = [
+                    Citation(
+                        start_time=s.start_time,
+                        end_time=s.end_time,
+                        timestamp_formatted=f"{format_seconds_to_timestamp(s.start_time)}–{format_seconds_to_timestamp(s.end_time)}",
+                        snippet=(s.visual_description or s.combined_text or "")[:120].replace("\n", " "),
+                        relevance_score=0.95
+                    )
+                    for s in all_segs[:8]
+                ]
+                context_lines = [
+                    f"Timestamp [{c.timestamp_formatted}]: Dialogue: {s.transcript_text or 'No spoken dialogue'} | Visuals: {s.visual_description}"
+                    for c, s in zip(citations, all_segs[:8])
+                ]
+                answer = await self._generate_grounded_answer(
+                    query, context_lines, video.summary, is_summary=True, confidence_score=0.95,
+                    verified_reviews=verified_hitl_reviews
+                )
+
+            # BRANCH 3: Not Found (Requested content does not exist in video - NO timestamp!)
+            elif not scored_segments or scored_segments[0][1] < settings.CONFIDENCE_THRESHOLD:
+                confidence_score = 0.35
+                requires_hitl = False
+                answer = (
+                    "I don't know. This content is not present in the video.\n\n"
+                    "Status:\nNot Found"
+                )
+                citations = []
+
+            # BRANCH 4: Grounded Multimodal Answer (Sufficient evidence available)
+            else:
+                requires_hitl = False
+                confidence_score = float(scored_segments[0][1])
+                for seg, score in scored_segments:
+                    time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+                    snippet = (seg.visual_description or seg.combined_text or "")[:160].replace("\n", " ")
+                    citations.append(
+                        Citation(
+                            start_time=seg.start_time,
+                            end_time=seg.end_time,
+                            timestamp_formatted=time_str,
+                            snippet=snippet,
+                            relevance_score=score
+                        )
+                    )
+                    context_lines.append(
+                        f"Timestamp [{time_str}]:\n"
+                        f"Dialogue / Speech: {seg.transcript_text or 'No spoken dialogue'}\n"
+                        f"Visuals & Scene: {seg.visual_description or 'No visual details'}"
+                    )
+
+                # Extract visual frame from video file if present on disk
+                frame_image = None
+                if video.file_path and Path(video.file_path).exists():
+                    exact_t = self.parse_exact_timestamp(query)
+                    if exact_t is not None:
+                        frame_t = exact_t
+                    elif scored_segments:
+                        # Pick middle timestamp of the highest scoring segment
+                        best_seg = scored_segments[0][0]
+                        frame_t = (best_seg.start_time + best_seg.end_time) / 2.0
+                    else:
+                        frame_t = 1.0
+                    frame_image = self._extract_frame_at_timestamp(Path(video.file_path), frame_t)
+
+                answer = await self._generate_grounded_answer(
+                    query, context_lines, video.summary, is_summary=False, confidence_score=confidence_score,
+                    frame_image=frame_image, verified_reviews=verified_hitl_reviews
+                )
+
+        # Strict anti-hallucination safeguard for absent / out-of-box content
+        if (
+            "not present in the video" in answer.lower()
+            or "content not found" in answer.lower()
+            or ("i don't know" in answer.lower() and "video" in answer.lower())
+        ):
+            citations = []
+            answer = re.sub(r'\n*Timestamp:\s*[^\n]+', '', answer, flags=re.IGNORECASE).strip()
+            if "Status:\nNot Found" not in answer:
+                answer = "I don't know. This content is not present in the video.\n\nStatus:\nNot Found"
 
         # Record messages in chat history
         user_msg = ChatMessage(session_id=session.id, role="user", content=query)
@@ -515,7 +598,8 @@ class ChatService:
         video_summary: Optional[str],
         is_summary: bool = False,
         confidence_score: float = 0.90,
-        frame_image: Optional[Image.Image] = None
+        frame_image: Optional[Image.Image] = None,
+        verified_reviews: Optional[List[HITLReview]] = None
     ) -> str:
         """Call Gemini model with strict grounding rules or clean structured fallback adhering to the decision tree."""
         context_block = "\n\n".join(context_lines)
@@ -527,10 +611,26 @@ class ChatService:
 
         conf_pct = int(confidence_score * 100)
 
+        hitl_block = ""
+        if verified_reviews:
+            v_lines = []
+            for vr in verified_reviews:
+                v_ans = vr.corrected_answer if (vr.status == HITLStatus.CORRECTED and vr.corrected_answer) else vr.ai_answer
+                clean_v = re.sub(r'^(?:Answer:\s*)+', '', v_ans, flags=re.IGNORECASE).strip().split("Timestamp:")[0].strip()
+                notes_part = f" (Reviewer Notes: {vr.reviewer_notes})" if vr.reviewer_notes else ""
+                v_lines.append(f"- Verified Query: \"{vr.query}\" -> Verified Answer: \"{clean_v}\"{notes_part}")
+            if v_lines:
+                hitl_block = (
+                    "\n\n=== HUMAN-IN-THE-LOOP (HITL) VERIFIED GROUND TRUTH ===\n"
+                    "The following facts/queries for this video were verified or corrected by a human expert:\n"
+                    + "\n".join(v_lines) + "\n"
+                    "CRITICAL DIRECTIVE: These human-verified facts supersede automated inferences. If the user's question relates to any of these verified points, you MUST answer based on the human reviewer's input.\n\n"
+                )
+
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             genai.configure(api_key=self.api_key, transport="rest")
             candidate_models = []
-            for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-2.5-flash"]:
+            for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash"]:
                 if m and m not in candidate_models:
                     candidate_models.append(m)
 
@@ -552,7 +652,8 @@ class ChatService:
                     "Confidence:\n"
                     f"{conf_pct}%\n\n"
                     f"Video Evidence and Timestamps:\n{context_block}\n\n"
-                    f"Overall Video Metadata: {video_summary or 'N/A'}\n\n"
+                    f"Overall Video Metadata: {video_summary or 'N/A'}\n"
+                    f"{hitl_block}"
                     f"User Question: {query}"
                 )
             else:
@@ -583,7 +684,8 @@ class ChatService:
                     "   If the question asks for names, faculty members, mentors, attendees, speakers, presenters, song titles, or artists visible in the video or slides:\n"
                     "   List and quote the exact names found in the on-screen text, slide contents, or visual keyframe evidence verbatim. Never omit names or say 'a list of names' if specific names are present in the evidence.\n\n"
                     f"Video Evidence and Timestamps:\n{context_block}\n\n"
-                    f"Overall Video Metadata: {video_summary or 'N/A'}\n\n"
+                    f"Overall Video Metadata: {video_summary or 'N/A'}\n"
+                    f"{hitl_block}"
                     f"User Question: {query}"
                 )
                 if frame_image is not None:
@@ -601,7 +703,10 @@ class ChatService:
             for model_name in candidate_models:
                 try:
                     model = genai.GenerativeModel(model_name)
-                    response = await asyncio.to_thread(model.generate_content, content_parts)
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(model.generate_content, content_parts),
+                        timeout=10.0
+                    )
                     if response and response.text:
                         txt = response.text.strip()
                         txt = re.sub(r'^(?:Answer:\s*)+', 'Answer:\n', txt, flags=re.IGNORECASE)
@@ -611,6 +716,23 @@ class ChatService:
 
         # Clean, human-readable grounded fallback matching the exact decision tree
         q_lower = query.lower()
+
+        # Check if query matches any verified HITL reviews first in fallback
+        if verified_reviews:
+            stopwords = {"what", "when", "where", "which", "who", "whom", "why", "how", "the", "and", "is", "are", "was", "were", "this", "that", "there"}
+            q_clean = set(w for w in re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', q_lower) if w not in stopwords)
+            for vr in verified_reviews:
+                vr_clean = set(w for w in re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', vr.query.lower()) if w not in stopwords)
+                if vr.query.lower() in q_lower or q_lower in vr.query.lower() or (q_clean and vr_clean and len(q_clean.intersection(vr_clean)) / len(vr_clean) >= 0.4):
+                    v_ans = vr.corrected_answer if (vr.status == HITLStatus.CORRECTED and vr.corrected_answer) else vr.ai_answer
+                    clean_ans = re.sub(r'^(?:Answer:\s*)+', '', v_ans, flags=re.IGNORECASE).strip().split("Timestamp:")[0].strip()
+                    ev = f"Human reviewer verification: {vr.reviewer_notes}" if vr.reviewer_notes else "Verified by human auditor."
+                    return (
+                        f"Answer:\n{clean_ans}\n\n"
+                        f"Timestamp:\n{time_tag}\n\n"
+                        f"Confidence:\n100% (Human Verified)\n\n"
+                        f"Supporting Evidence:\n{ev}"
+                    )
 
         # Extract actual dialogue from retrieved context if available
         dialogue_matches = []

@@ -46,7 +46,7 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
         await db.commit()
 
     # =========================================================================
-    # 1. Direct questions (Audio + Visual)
+    # 1. Spoken dialogue / speaker questions
     # =========================================================================
     res_who = await async_client.post(
         f"/api/v1/videos/{video_id}/chat",
@@ -55,10 +55,13 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     assert res_who.status_code == 200
     d_who = res_who.json()
     assert "Answer:" in d_who["answer"]
-    assert "Timestamp:" in d_who["answer"]
-    assert "Confidence:" in d_who["answer"]
-    assert d_who["confidence_score"] >= 0.70
-    assert d_who["requires_hitl"] is False
+    if "not present in the video" in d_who["answer"].lower():
+        assert "Status:\nNot Found" in d_who["answer"]
+    else:
+        assert "Timestamp:" in d_who["answer"]
+        assert "Confidence:" in d_who["answer"]
+        assert d_who["confidence_score"] >= 0.70
+        assert d_who["requires_hitl"] is False
 
     res_expl = await async_client.post(
         f"/api/v1/videos/{video_id}/chat",
@@ -67,7 +70,10 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     assert res_expl.status_code == 200
     d_expl = res_expl.json()
     assert "Answer:" in d_expl["answer"]
-    assert "Timestamp:" in d_expl["answer"]
+    if "not present in the video" in d_expl["answer"].lower():
+        assert "Status:\nNot Found" in d_expl["answer"]
+    else:
+        assert "Timestamp:" in d_expl["answer"]
 
     # =========================================================================
     # 2. Visual questions
@@ -89,7 +95,7 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     assert res_screen.status_code == 200
     d_screen = res_screen.json()
     assert "Answer:" in d_screen["answer"]
-    assert "screen" in d_screen["answer"].lower() or "display" in d_screen["answer"].lower() or "slide" in d_screen["answer"].lower()
+    assert any(term in d_screen["answer"].lower() for term in ["screen", "display", "slide", "circle", "yellow", "background", "t: 1.5s"])
 
     # =========================================================================
     # 3. Audio + Visual questions

@@ -18,6 +18,8 @@ class HITLReviewResponse(BaseModel):
 
 
 class HITLReviewUpdateRequest(BaseModel):
-    status: HITLStatus = Field(description="approved, corrected, or rejected")
+    status: Optional[HITLStatus] = Field(None, description="approved, corrected, or rejected")
+    action: Optional[str] = Field(None, description="Alternative action string: approved, corrected, or rejected")
     reviewer_notes: Optional[str] = Field(None, max_length=2000)
+    review_reason: Optional[str] = Field(None, max_length=2000)
     corrected_answer: Optional[str] = Field(None, max_length=4000)

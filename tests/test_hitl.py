@@ -52,3 +52,16 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
     updated_data = update_res.json()
     assert updated_data["status"] == "corrected"
     assert updated_data["reviewer_notes"] == "Presenter appears calm, verified by human auditor."
+
+    # 5. Subsequent query for the verified question now uses the human-verified answer!
+    chat_verified = await async_client.post(
+        f"/api/v1/videos/{video_id}/chat",
+        json={"query": "was the person angry?"}
+    )
+    assert chat_verified.status_code == 200
+    vdata = chat_verified.json()
+    assert vdata["confidence_score"] == 1.0
+    assert vdata["requires_hitl"] is False
+    assert "No signs of anger observed" in vdata["answer"]
+    assert "Human Verified" in vdata["answer"]
+    assert "Presenter appears calm, verified by human auditor" in vdata["answer"]

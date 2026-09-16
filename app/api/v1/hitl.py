@@ -57,6 +57,11 @@ async def list_hitl_reviews(
     response_model=HITLReviewResponse,
     summary="Submit human review decision"
 )
+@router.post(
+    "/reviews/{review_id}/resolve",
+    response_model=HITLReviewResponse,
+    summary="Submit human review decision (resolve alias)"
+)
 async def submit_hitl_review(
     review_id: str,
     payload: HITLReviewUpdateRequest,
@@ -73,12 +78,52 @@ async def submit_hitl_review(
             detail=f"HITL review with id '{review_id}' not found."
         )
 
-    review.status = payload.status
-    if payload.reviewer_notes is not None:
-        review.reviewer_notes = payload.reviewer_notes
+    # Determine status from status or action
+    target_status = payload.status
+    if not target_status and payload.action:
+        act = payload.action.strip().lower()
+        if "correct" in act:
+            target_status = HITLStatus.CORRECTED
+        elif "reject" in act:
+            target_status = HITLStatus.REJECTED
+        else:
+            target_status = HITLStatus.APPROVED
+
+    if not target_status:
+        target_status = HITLStatus.APPROVED
+
+    review.status = target_status
+
+    # Determine reviewer notes
+    notes = payload.reviewer_notes if payload.reviewer_notes is not None else payload.review_reason
+    if notes is not None:
+        review.reviewer_notes = notes
+
     if payload.corrected_answer is not None:
         review.corrected_answer = payload.corrected_answer
+
     review.reviewed_at = datetime.utcnow()
+
+    # Update corresponding ChatMessage in the video chat session if found
+    try:
+        from app.db.models import ChatMessage, ChatSession
+        chat_query = (
+            select(ChatMessage)
+            .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+            .where(ChatSession.video_id == review.video_id)
+            .where(ChatMessage.role == "assistant")
+            .where(ChatMessage.content == review.ai_answer)
+        )
+        msg_result = await db.execute(chat_query)
+        msg = msg_result.scalars().first()
+        if msg:
+            if review.status == HITLStatus.CORRECTED and review.corrected_answer:
+                msg.content = f"Answer:\n{review.corrected_answer}\n\nConfidence:\n100% (Human Verified)\n\nSupporting Evidence:\nCorrected by human reviewer: {review.reviewer_notes or 'Human input'}"
+            elif review.status == HITLStatus.APPROVED:
+                msg.content = f"Answer:\n{review.ai_answer}\n\nConfidence:\n100% (Human Verified)\n\nSupporting Evidence:\nApproved by human reviewer: {review.reviewer_notes or 'Verified correct'}"
+            msg.confidence_score = 1.0
+    except Exception:
+        pass
 
     await db.commit()
     await db.refresh(review)

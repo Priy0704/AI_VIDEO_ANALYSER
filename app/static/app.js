@@ -900,6 +900,7 @@ async function submitHITL(reviewId, action, reason = "Approved by reviewer", cor
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                status: action,
                 action: action,
                 review_reason: reason,
                 reviewer_notes: reason,
@@ -908,9 +909,19 @@ async function submitHITL(reviewId, action, reason = "Approved by reviewer", cor
         });
 
         if (res.ok) {
+            const data = await res.json();
             const item = document.getElementById(`hitl-${reviewId}`);
             if (item) item.remove();
             loadHITLReviews();
+
+            // Refresh chat or append confirmation message
+            const finalAns = data.corrected_answer || data.ai_answer;
+            appendMessage(
+                "assistant",
+                `Answer:\n${finalAns}\n\nConfidence:\n100% (Human Verified)\n\nSupporting Evidence:\nVerified by human reviewer: ${reason}`,
+                [],
+                1.0
+            );
         } else {
             alert("Failed to submit review.");
         }
@@ -920,9 +931,10 @@ async function submitHITL(reviewId, action, reason = "Approved by reviewer", cor
 }
 
 function promptCorrection(reviewId) {
-    const correction = prompt("Enter corrected answer for this query:");
-    if (correction) {
-        submitHITL(reviewId, "corrected", "Manual human reviewer correction", correction);
+    const correction = prompt("Enter verified/corrected answer for this query:");
+    if (correction && correction.trim()) {
+        const notes = prompt("Enter reviewer notes (optional):", "Corrected and verified by human expert");
+        submitHITL(reviewId, "corrected", notes || "Corrected and verified by human expert", correction.trim());
     }
 }
 
