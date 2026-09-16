@@ -62,21 +62,29 @@ async def async_client():
 
     # Clean up test videos from database and storage so tests do not clutter user list
     from app.db.database import AsyncSessionLocal
-    from app.db.models import Video
-    from sqlalchemy import select
+    from app.db.models import Video, HITLReview, VideoSegment, ChatSession, ChatMessage
+    from sqlalchemy import select, delete
     import os
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
             select(Video).where(
-                Video.filename.in_(["hitl_test.mp4", "chat_test.mp4", "sample.mp4", "demo.mp4", "test_sample.mp4"])
+                Video.filename.in_(["hitl_test.mp4", "chat_test.mp4", "sample.mp4", "demo.mp4", "test_sample.mp4", "qa_multimodal_test.mp4"])
             )
         )
-        for v in res.scalars().all():
+        test_vids = res.scalars().all()
+        for v in test_vids:
             try:
                 if v.file_path and os.path.exists(v.file_path):
                     os.remove(v.file_path)
             except Exception:
                 pass
+            # Delete related HITL, sessions, segments
+            await db.execute(delete(HITLReview).where(HITLReview.video_id == v.id))
+            s_res = await db.execute(select(ChatSession).where(ChatSession.video_id == v.id))
+            for s in s_res.scalars().all():
+                await db.execute(delete(ChatMessage).where(ChatMessage.session_id == s.id))
+                await db.delete(s)
+            await db.execute(delete(VideoSegment).where(VideoSegment.video_id == v.id))
             await db.delete(v)
         await db.commit()
