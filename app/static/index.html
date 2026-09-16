@@ -468,9 +468,9 @@
 
             <div class="upload-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
                 <i class="fa-solid fa-file-video fa-2x" style="color: var(--primary); margin-bottom: 0.5rem;"></i>
-                <p style="font-size: 0.85rem; font-weight: 500;">Click or Drop Video (MP4/MOV)</p>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Up to 30 mins / 500MB</p>
-                <input type="file" id="fileInput" accept=".mp4,.mov,.mkv,.avi" style="display: none;">
+                <p style="font-size: 0.85rem; font-weight: 500;">Click or Drop Video(s) (MP4/MOV)</p>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Single or Multi-Video Batch Upload</p>
+                <input type="file" id="fileInput" accept=".mp4,.mov,.mkv,.avi" multiple style="display: none;">
             </div>
 
             <div class="progress-box" id="progressBox">
@@ -546,6 +546,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=2.1"></script>
+    <script src="/static/app.js?v=2.2"></script>
 </body>
 </html>

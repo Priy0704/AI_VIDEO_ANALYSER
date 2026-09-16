@@ -18,18 +18,36 @@ document.addEventListener("DOMContentLoaded", () => {
     dropzone.addEventListener("dragleave", () => {
         dropzone.style.borderColor = "#334155";
     });
-    dropzone.addEventListener("drop", (e) => {
+    });
+    dropzone.addEventListener("drop", async (e) => {
         e.preventDefault();
         dropzone.style.borderColor = "#334155";
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            uploadVideoFile(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            await handleMultipleFiles(Array.from(e.dataTransfer.files));
         }
     });
 });
 
-function handleFileSelect(e) {
-    if (e.target.files && e.target.files[0]) {
-        uploadVideoFile(e.target.files[0]);
+async function handleFileSelect(e) {
+    if (e.target.files && e.target.files.length > 0) {
+        await handleMultipleFiles(Array.from(e.target.files));
+    }
+}
+
+async function handleMultipleFiles(files) {
+    const validFiles = files.filter(f => /\.(mp4|mov|mkv|avi)$/i.test(f.name));
+    if (validFiles.length === 0) {
+        alert("Please select valid video files (.mp4, .mov, .mkv, .avi)");
+        return;
+    }
+
+    for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const stageLabel = document.getElementById("stageLabel");
+        if (stageLabel && validFiles.length > 1) {
+            stageLabel.innerText = `Uploading [${i + 1}/${validFiles.length}]: ${file.name}...`;
+        }
+        await uploadVideoFile(file);
     }
 }
 
