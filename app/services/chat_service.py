@@ -588,7 +588,7 @@ class ChatService:
                     response = await asyncio.to_thread(model.generate_content, content_parts)
                     if response and response.text:
                         txt = response.text.strip()
-                        txt = re.sub(r'^(?:Answer:\s*)+Answer:\s*', 'Answer:\n', txt, flags=re.IGNORECASE)
+                        txt = re.sub(r'^(?:Answer:\s*)+', 'Answer:\n', txt, flags=re.IGNORECASE)
                         return txt
                 except Exception as e:
                     logger.warning(f"Model {model_name} failed: {e}. Trying next candidate if available.")
