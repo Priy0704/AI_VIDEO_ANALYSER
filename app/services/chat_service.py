@@ -170,6 +170,14 @@ class ChatService:
             seg_text = f"{segment.visual_description or ''} {segment.transcript_text or ''}".lower()
             relevance = max(0.0, base_score)
 
+            # Direct lexical matching for query keywords in transcript or visual text
+            stopwords = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "the", "and", "is", "are", "was", "were", "this", "that", "there", "about", "did", "does", "been", "being", "have", "has", "had", "for", "with", "from"}
+            query_keywords = [w for w in re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', q_lower) if w not in stopwords]
+            matches = sum(1 for kw in query_keywords if kw in seg_text)
+            if matches > 0:
+                kw_score = min(0.96, 0.75 + (0.10 * matches))
+                relevance = max(relevance, kw_score)
+
             if has_person_query and any(w in seg_text for w in ["man", "woman", "person", "speaker", "presenter", "standing", "speaking", "wearing"]):
                 relevance = max(relevance, 0.92)
             if has_clothing_query and any(w in seg_text for w in ["polo", "shirt", "pants", "lanyard", "badge", "suit", "wearing", "dark", "blue"]):

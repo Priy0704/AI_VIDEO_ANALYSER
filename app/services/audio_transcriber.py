@@ -47,11 +47,20 @@ class AudioTranscriber:
         """Send audio to Gemini model with prompt requesting exact timestamped segments."""
         logger.info(f"Transcribing audio via Gemini API: {audio_path.name}")
         
-        # Upload audio file to Gemini File API
-        uploaded_file = await asyncio.to_thread(genai.upload_file, str(audio_path), mime_type="audio/wav")
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        audio_part = {"mime_type": "audio/wav", "data": audio_bytes}
         
+        prompt = (
+            "You are an expert speech recognition system. Transcribe the spoken audio precisely word-for-word. "
+            "Output your response strictly as a valid JSON array of chronological objects with keys: "
+            "'start' (float seconds), 'end' (float seconds), 'text' (transcribed string). "
+            "Example: [{\"start\": 0.0, \"end\": 3.5, \"text\": \"Welcome to the lecture.\"}]"
+        )
+
         candidate_models = []
-        for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+        for m in [settings.GEMINI_MODEL, "gemini-3.5-flash-lite", "gemini-3.6-flash"]:
             if m and m not in candidate_models:
                 candidate_models.append(m)
 
@@ -59,7 +68,7 @@ class AudioTranscriber:
         for model_name in candidate_models:
             try:
                 model = genai.GenerativeModel(model_name)
-                response = await asyncio.to_thread(model.generate_content, [uploaded_file, prompt])
+                response = await asyncio.to_thread(model.generate_content, [prompt, audio_part])
                 if response and response.text:
                     raw_text = response.text.strip()
                     break
