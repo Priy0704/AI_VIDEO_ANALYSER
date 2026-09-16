@@ -153,18 +153,23 @@
         /* 3-Column Layout */
         .main-container {
             display: grid;
-            grid-template-columns: 320px 1fr 400px;
-            gap: 1.25rem;
-            padding: 1.25rem 1.5rem;
+            grid-template-columns: 290px 1fr 390px;
+            grid-template-rows: minmax(0, 1fr);
+            gap: 1rem;
+            padding: 0.85rem 1.15rem;
             flex: 1;
             height: calc(100vh - 65px);
+            max-height: calc(100vh - 65px);
             overflow: hidden;
+            box-sizing: border-box;
         }
 
         @media (max-width: 1200px) {
             .main-container {
                 grid-template-columns: 1fr;
+                grid-template-rows: auto;
                 height: auto;
+                max-height: none;
                 overflow: visible;
             }
         }
@@ -175,13 +180,15 @@
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
-            padding: 1.1rem;
+            padding: 0.85rem;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
             position: relative;
             min-height: 0;
+            height: 100%;
+            box-sizing: border-box;
         }
 
         .card-title {
@@ -438,12 +445,22 @@
             padding: 0;
         }
 
+        .center-card {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+            gap: 0.4rem;
+        }
+
         .player-header {
-            padding: 0.85rem 1.25rem;
+            padding: 0.35rem 0.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--border);
+            flex: 0 0 auto;
         }
 
         .video-wrapper {
@@ -451,13 +468,20 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            max-height: 48%;
+            flex: 0 0 auto;
+            height: 205px;
+            max-height: 205px;
+            border-radius: var(--radius-md);
+            overflow: hidden;
             position: relative;
+            border: 1px solid var(--border);
         }
 
         video {
             width: 100%;
-            max-height: 320px;
+            height: 100%;
+            max-height: 205px;
+            object-fit: contain;
             display: block;
             outline: none;
             background: #000;
@@ -465,17 +489,21 @@
 
         /* Inspector Tabs & Container */
         .inspector-panel {
-            flex: 1;
+            flex: 1 1 0%;
+            min-height: 0;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             background: rgba(11, 15, 25, 0.4);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
         }
 
         .inspector-tabs {
+            flex: 0 0 auto;
             display: flex;
             gap: 0.35rem;
-            padding: 0.6rem 1rem;
+            padding: 0.45rem 0.75rem;
             border-bottom: 1px solid var(--border);
             background: rgba(15, 23, 42, 0.5);
         }
@@ -484,14 +512,14 @@
             background: transparent;
             border: 1px solid transparent;
             color: var(--text-muted);
-            padding: 0.4rem 0.85rem;
+            padding: 0.35rem 0.75rem;
             border-radius: var(--radius-sm);
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 0.45rem;
+            gap: 0.4rem;
             transition: all 0.2s;
         }
 
@@ -521,13 +549,32 @@
 
         /* Tab Content Lists (Separate Independent Scrollers) */
         .tab-pane {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0.75rem 1rem;
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: auto !important;
+            padding: 0.65rem 0.75rem;
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
-            height: 100%;
+            box-sizing: border-box;
+            scrollbar-width: thin;
+            scrollbar-color: #0284c7 rgba(15, 23, 42, 0.5);
+        }
+
+        .tab-pane::-webkit-scrollbar {
+            width: 8px;
+        }
+        .tab-pane::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 4px;
+        }
+        .tab-pane::-webkit-scrollbar-thumb {
+            background: #0284c7;
+            border-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        .tab-pane::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
         }
 
         /* Transcript Accordion Cards */
@@ -749,6 +796,8 @@
             overflow: hidden;
             min-height: 0;
             height: 100%;
+            gap: 0.35rem;
+            box-sizing: border-box;
         }
 
         .chat-header-actions {
@@ -762,9 +811,9 @@
             background: rgba(255, 255, 255, 0.06);
             border: 1px solid var(--border);
             color: var(--text-muted);
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             font-weight: 500;
-            padding: 0.2rem 0.5rem;
+            padding: 0.2rem 0.45rem;
             border-radius: 4px;
             cursor: pointer;
             display: inline-flex;
@@ -782,32 +831,44 @@
         .chat-messages {
             flex: 1 1 0%;
             min-height: 0;
-            overflow-y: scroll !important;
+            overflow-y: auto !important;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
-            padding-right: 0.35rem;
+            gap: 0.65rem;
+            padding: 0.3rem 0.5rem;
             scrollbar-width: thin;
-            scrollbar-color: rgba(56, 189, 248, 0.35) rgba(15, 23, 42, 0.4);
+            scrollbar-color: #0284c7 rgba(15, 23, 42, 0.5);
             overscroll-behavior: contain;
+            box-sizing: border-box;
+        }
+
+        /* Scroller on opposite (left) side */
+        .chat-messages.scrollbar-opposite {
+            direction: rtl;
+            padding-left: 0.65rem;
+            padding-right: 0.25rem;
+        }
+        .chat-messages.scrollbar-opposite > * {
+            direction: ltr;
         }
 
         .chat-messages::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
         }
 
         .chat-messages::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.4);
+            background: rgba(15, 23, 42, 0.5);
             border-radius: 4px;
         }
 
         .chat-messages::-webkit-scrollbar-thumb {
-            background: rgba(56, 189, 248, 0.3);
+            background: #0284c7;
             border-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
         }
 
         .chat-messages::-webkit-scrollbar-thumb:hover {
-            background: var(--primary);
+            background: #38bdf8;
         }
 
         .message {
@@ -935,11 +996,12 @@
 
         /* Quick Suggestions Chips */
         .suggestions-bar {
+            flex: 0 0 auto;
             display: flex;
             gap: 0.35rem;
             overflow-x: auto;
-            padding: 0.5rem 0;
-            margin-top: 0.5rem;
+            padding: 0.25rem 0;
+            margin-top: 0.2rem;
         }
 
         .suggestion-chip {
@@ -962,13 +1024,14 @@
 
         /* Chat Input Box */
         .chat-input-box {
+            flex: 0 0 auto;
             display: flex;
             gap: 0.5rem;
-            margin-top: 0.5rem;
+            margin-top: 0.25rem;
             background: rgba(15, 23, 42, 0.6);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
-            padding: 0.35rem 0.45rem 0.35rem 0.85rem;
+            padding: 0.3rem 0.45rem 0.3rem 0.75rem;
             transition: border-color 0.2s;
         }
 
@@ -1007,9 +1070,12 @@
 
         /* HITL Section */
         .hitl-section {
-            margin-top: 0.75rem;
+            flex: 0 0 auto;
+            margin-top: 0.35rem;
             border-top: 1px solid var(--border);
-            padding-top: 0.75rem;
+            padding-top: 0.35rem;
+            max-height: 90px;
+            overflow-y: auto;
         }
 
         .hitl-item {
@@ -1197,12 +1263,15 @@
 
         <!-- RIGHT: Grounded Chat & HITL -->
         <div class="card chat-column">
-            <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.65rem;">
+            <div class="card-title" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 0.4rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <i class="fa-solid fa-robot"></i>
                     <span>Grounded AI Assistant</span>
                 </div>
                 <div class="chat-header-actions">
+                    <button class="btn-chat-action" id="btnToggleScrollbarSide" onclick="toggleScrollbarSide()" title="Toggle scrollbar position (Left / Right)">
+                        <i class="fa-solid fa-arrows-left-right"></i> <span id="lblScrollSide">Left Scroller</span>
+                    </button>
                     <button class="btn-chat-action" id="btnToggleAllAnswers" onclick="toggleAllAnswers()" title="Collapse all answers to save space">
                         <i class="fa-solid fa-compress"></i> <span>Hide All</span>
                     </button>
@@ -1212,7 +1281,7 @@
                 </div>
             </div>
 
-            <div class="chat-messages" id="chatMessages">
+            <div class="chat-messages scrollbar-opposite" id="chatMessages">
                 <div class="message assistant">
                     Hello! Ask any question about the selected video: actions, spoken dialogue, people, visible items, or timestamps (e.g. <i>"What is being explained?"</i> or <i>"What happened around 0:10?"</i>).
                 </div>
@@ -1246,6 +1315,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=3.7"></script>
+    <script src="/static/app.js?v=3.8"></script>
 </body>
 </html>
