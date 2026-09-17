@@ -11,10 +11,20 @@ let libraryFilter = 'all';
 let isTimelineScrubbing = false;
 let chatScope = 'all';
 
+// Independent chat histories for All Videos vs each individual video (no mixing!)
+const chatStorage = {
+    all: {
+        sessionId: null,
+        messagesHtml: []
+    },
+    videos: {} // videoId -> { sessionId: null, messagesHtml: [] }
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     loadVideoList();
     loadHITLReviews();
     initTimelineScrubbing();
+    renderChatMessagesForCurrentScope();
 
     const fileInput = document.getElementById("fileInput");
     if (fileInput) {
@@ -653,7 +663,9 @@ async function selectVideo(videoId, forceRefresh = false) {
     }
 
     currentVideoId = videoId;
-    currentSessionId = null;
+    if (!chatStorage.videos[videoId]) {
+        chatStorage.videos[videoId] = { sessionId: null, messagesHtml: [] };
+    }
     renderLibraryList();
     loadHITLReviews();
 
@@ -677,7 +689,7 @@ async function selectVideo(videoId, forceRefresh = false) {
         const activeDot = document.getElementById("currentVideoActiveDot");
         if (activeDot) activeDot.style.display = "inline-block";
 
-        // If in individual scope, update copilot focus subtitle and placeholder
+        // If in individual scope, update copilot focus subtitle, placeholder, and render its separate chat
         if (chatScope === 'current') {
             const shortName = currentVideoData.filename.length > 28 
                 ? currentVideoData.filename.substring(0, 26) + '..' 
@@ -688,6 +700,8 @@ async function selectVideo(videoId, forceRefresh = false) {
             }
             const input = document.getElementById("queryInput");
             if (input) input.placeholder = `Ask anything about ${shortName}...`;
+
+            renderChatMessagesForCurrentScope();
         }
 
         // Update Tab Badges
@@ -1526,6 +1540,55 @@ function handleKeyPress(e) {
     }
 }
 
+function renderChatMessagesForCurrentScope() {
+    const chatMessages = document.getElementById("chatMessages");
+    if (!chatMessages) return;
+
+    if (chatScope === 'all') {
+        if (chatStorage.all.messagesHtml.length === 0) {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+                        <i class="fa-solid fa-earth-americas"></i> All-Videos Intelligence Chat
+                    </div>
+                    Ask any question across all uploaded videos in your library (e.g. <i>"Trace the person across cameras"</i> or <i>"Total person count across all videos"</i>).
+                </div>
+            `;
+        } else {
+            chatMessages.innerHTML = chatStorage.all.messagesHtml.join("");
+        }
+    } else {
+        // Individual Video Chat ('current')
+        if (!currentVideoId) {
+            chatMessages.innerHTML = `
+                <div class="message assistant" style="color: var(--accent-amber);">
+                    <div style="font-weight: 600; margin-bottom: 0.35rem;"><i class="fa-solid fa-circle-info"></i> No Video Selected</div>
+                    Please select a video from the library on the left to start an individual video chat.
+                </div>
+            `;
+        } else {
+            const vStore = chatStorage.videos[currentVideoId] || { sessionId: null, messagesHtml: [] };
+            if (vStore.messagesHtml.length === 0) {
+                const vName = currentVideoData ? currentVideoData.filename : 'Current Video';
+                chatMessages.innerHTML = `
+                    <div class="message assistant">
+                        <div style="font-weight: 600; color: #34d399; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+                            <i class="fa-solid fa-film"></i> Single Video Chat
+                        </div>
+                        Focused on <strong>${escapeHtml(vName)}</strong>. Ask about spoken dialogue, visual scenes, or key moments in this video.
+                    </div>
+                `;
+            } else {
+                chatMessages.innerHTML = vStore.messagesHtml.join("");
+            }
+        }
+    }
+
+    setTimeout(() => {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }, 40);
+}
+
 function setChatScope(scope) {
     chatScope = scope;
     const btnAll = document.getElementById("scopeBtnAll");
@@ -1578,37 +1641,61 @@ function setChatScope(scope) {
             `;
         }
     }
+
+    // Switch view to the separated chat messages!
+    renderChatMessagesForCurrentScope();
 }
 
-function jumpToVideoAndTimestamp(videoId, seconds) {
+async function jumpToVideoAndTimestamp(videoId, seconds, autoplay = true) {
     const sec = Math.max(0, parseFloat(seconds) || 0);
+    const player = document.getElementById("videoPlayer");
+    if (!player) return;
+
     if (videoId && videoId !== currentVideoId) {
-        selectVideo(videoId).then(() => {
-            setTimeout(() => {
-                seekVideo(sec);
-            }, 350);
-        });
+        // Load target video without disrupting All Videos chat view
+        await selectVideo(videoId);
+
+        const applySeekAndPlay = () => {
+            player.currentTime = sec;
+            if (autoplay) {
+                const p = player.play();
+                if (p !== undefined) p.catch(err => console.debug("Autoplay defer:", err));
+            }
+        };
+
+        if (player.readyState >= 1) {
+            applySeekAndPlay();
+        } else {
+            player.addEventListener("loadedmetadata", applySeekAndPlay, { once: true });
+            setTimeout(applySeekAndPlay, 500);
+        }
     } else {
-        seekVideo(sec);
+        player.currentTime = sec;
+        if (autoplay) {
+            const p = player.play();
+            if (p !== undefined) p.catch(err => console.debug("Autoplay defer:", err));
+        }
     }
 }
 
-function jumpToVideoByFilenameAndTimestamp(filename, seconds) {
+async function jumpToVideoByFilenameAndTimestamp(filename, seconds, autoplay = true) {
     const sec = Math.max(0, parseFloat(seconds) || 0);
     const clean = (filename || '').trim().toLowerCase();
     const matched = libraryVideosCache.find(v => {
-        const fn = v.filename.toLowerCase();
+        const fn = (v.filename || '').toLowerCase();
         return fn === clean || fn.includes(clean) || clean.includes(fn);
     });
     if (matched) {
-        jumpToVideoAndTimestamp(matched.video_id, sec);
+        await jumpToVideoAndTimestamp(matched.video_id, sec, autoplay);
     } else {
         seekVideo(sec);
+        const player = document.getElementById("videoPlayer");
+        if (player && autoplay) player.play().catch(e => console.debug(e));
     }
 }
 
 // Automatically detect any timestamps and cross-video references in AI answer and make them clickable
-function makeTimestampsClickable(htmlText) {
+function makeTimestampsClickable(htmlText, citations = []) {
     // 1. Convert markdown bold and italic
     let formatted = htmlText
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -1620,13 +1707,32 @@ function makeTimestampsClickable(htmlText) {
         const sec = parseTimeToSeconds(tStart);
         const cleanName = vName.trim();
         const shortName = cleanName.length > 20 ? cleanName.substring(0, 18) + '..' : cleanName;
-        return `<button class="ai-time-jump" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(cleanName)}', ${sec})" title="Jump to ${escapeHtml(cleanName)} at ${tStart}"><i class="fa-solid fa-film" style="font-size:0.55rem"></i> ${escapeHtml(shortName)} ${tStart}</button>`;
+        return `<button class="ai-time-jump" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(cleanName)}', ${sec})" title="Play ${escapeHtml(cleanName)} at ${tStart}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> <i class="fa-solid fa-film" style="font-size:0.5rem"></i> ${escapeHtml(shortName)} ${tStart}</button>`;
     });
 
     // 3. Convert standard timestamps [MM:SS] or MM:SS
     const timestampRegex = /(?:\[)?\b(\d{1,2}:\d{2}(?::\d{2})?)\b(?:\])?/g;
     formatted = formatted.replace(timestampRegex, (match, timeStr) => {
         const sec = parseTimeToSeconds(timeStr);
+        let matchedVidId = (chatScope === 'current' ? currentVideoId : null);
+        let matchedVidName = (chatScope === 'current' && currentVideoData ? currentVideoData.filename : '');
+
+        if (citations && citations.length > 0) {
+            const found = citations.find(c => Math.abs(c.start_time - sec) <= 35 || c.timestamp_formatted.includes(timeStr));
+            if (found) {
+                matchedVidId = found.video_id;
+                matchedVidName = found.video_filename;
+            } else if (citations.length === 1) {
+                matchedVidId = citations[0].video_id;
+                matchedVidName = citations[0].video_filename;
+            }
+        }
+
+        if (matchedVidId) {
+            const shortName = matchedVidName ? (matchedVidName.length > 16 ? matchedVidName.substring(0, 14) + '..' : matchedVidName) : '';
+            return `<button class="ai-time-jump" onclick="jumpToVideoAndTimestamp('${matchedVidId}', ${sec})" title="Play ${escapeHtml(matchedVidName || '')} at ${timeStr}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> ${shortName ? `<span style="opacity:0.8; margin-right:2px;">${escapeHtml(shortName)}</span>` : ''}${timeStr}</button>`;
+        }
+
         return `<button class="ai-time-jump" onclick="seekVideo(${sec})" title="Jump video to ${timeStr}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> ${timeStr}</button>`;
     });
 
@@ -1651,21 +1757,35 @@ async function sendChatMessage() {
     }
 
     input.value = "";
-    const chatMessages = document.getElementById("chatMessages");
+    const isAll = (chatScope === 'all');
 
+    // Create user message HTML
     const scopeBadgeHtml = (chatScope === 'current' && currentVideoData)
         ? `<div style="font-size: 0.65rem; color: #34d399; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem;"><i class="fa-solid fa-film"></i> ${escapeHtml(currentVideoData.filename.length > 30 ? currentVideoData.filename.substring(0, 28) + '..' : currentVideoData.filename)}</div>`
         : `<div style="font-size: 0.65rem; color: #38bdf8; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem;"><i class="fa-solid fa-earth-americas"></i> All Videos</div>`;
 
-    chatMessages.innerHTML += `
+    const userMsgHtml = `
         <div class="message user">
             ${scopeBadgeHtml}
             ${escapeHtml(query)}
         </div>
     `;
-    chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Show typing spinner
+    // Save to separate in-memory storage
+    if (isAll) {
+        chatStorage.all.messagesHtml.push(userMsgHtml);
+    } else {
+        if (!chatStorage.videos[currentVideoId]) {
+            chatStorage.videos[currentVideoId] = { sessionId: null, messagesHtml: [] };
+        }
+        chatStorage.videos[currentVideoId].messagesHtml.push(userMsgHtml);
+    }
+
+    // Render current scope messages
+    renderChatMessagesForCurrentScope();
+
+    // Show typing spinner in chat container
+    const chatMessages = document.getElementById("chatMessages");
     const typingId = `typing-${Date.now()}`;
     const typingText = (chatScope === 'current')
         ? 'Analyzing multimodal context for this video...'
@@ -1681,9 +1801,13 @@ async function sendChatMessage() {
     try {
         const isSingle = (chatScope === 'current' && currentVideoId);
         const endpoint = isSingle ? `/api/v1/videos/${currentVideoId}/chat` : `/api/v1/chat`;
+        const activeSessionId = isSingle 
+            ? (chatStorage.videos[currentVideoId]?.sessionId || null) 
+            : chatStorage.all.sessionId;
+
         const payload = isSingle
-            ? { query: query, session_id: currentSessionId }
-            : { query: query, session_id: currentSessionId, scope: "all", video_id: currentVideoId || null };
+            ? { query: query, session_id: activeSessionId }
+            : { query: query, session_id: activeSessionId, scope: "all", video_id: currentVideoId || null };
 
         const res = await fetch(endpoint, {
             method: "POST",
@@ -1695,16 +1819,25 @@ async function sendChatMessage() {
         if (typingElem) typingElem.remove();
 
         if (!res.ok) {
-            chatMessages.innerHTML += `
+            const errHtml = `
                 <div class="message assistant" style="color: var(--accent-rose);">
                     <i class="fa-solid fa-triangle-exclamation"></i> Error communicating with AI Copilot service.
                 </div>
             `;
+            if (isAll) chatStorage.all.messagesHtml.push(errHtml);
+            else if (currentVideoId) chatStorage.videos[currentVideoId].messagesHtml.push(errHtml);
+            renderChatMessagesForCurrentScope();
             return;
         }
 
         const data = await res.json();
-        currentSessionId = data.session_id;
+
+        // Update independent session ID
+        if (isAll) {
+            chatStorage.all.sessionId = data.session_id;
+        } else if (currentVideoId) {
+            chatStorage.videos[currentVideoId].sessionId = data.session_id;
+        }
 
         const confPct = Math.round((data.confidence_score || 0) * 100);
         let confColor = confPct >= 75 ? "#34d399" : confPct >= 50 ? "#f59e0b" : "#ef4444";
@@ -1728,13 +1861,13 @@ async function sendChatMessage() {
             `;
         }
 
-        const formattedAnswer = makeTimestampsClickable(escapeHtml(data.answer));
+        const formattedAnswer = makeTimestampsClickable(escapeHtml(data.answer), data.citations || []);
         const msgId = `asst-msg-${Date.now()}`;
         const videosTag = (data.videos_analyzed && data.videos_analyzed.length > 1) 
             ? `<span style="font-size: 0.68rem; color: #38bdf8; margin-left: 0.4rem;"><i class="fa-solid fa-layer-group"></i> ${data.videos_analyzed.length} Videos</span>`
             : '';
 
-        chatMessages.innerHTML += `
+        const asstMsgHtml = `
             <div class="message assistant" id="${msgId}">
                 <div class="message-top-bar">
                     <div style="display: flex; align-items: center; gap: 0.45rem;">
@@ -1755,9 +1888,15 @@ async function sendChatMessage() {
                 </div>
             </div>
         `;
-        setTimeout(() => {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }, 50);
+
+        // Save to separate in-memory storage
+        if (isAll) {
+            chatStorage.all.messagesHtml.push(asstMsgHtml);
+        } else if (currentVideoId) {
+            chatStorage.videos[currentVideoId].messagesHtml.push(asstMsgHtml);
+        }
+
+        renderChatMessagesForCurrentScope();
 
         if (data.requires_hitl) {
             loadHITLReviews();
@@ -1768,11 +1907,14 @@ async function sendChatMessage() {
         const typingElem = document.getElementById(typingId);
         if (typingElem) typingElem.remove();
 
-        chatMessages.innerHTML += `
+        const netErrHtml = `
             <div class="message assistant" style="color: var(--accent-rose);">
                 <i class="fa-solid fa-triangle-exclamation"></i> Network error connecting to chat service.
             </div>
         `;
+        if (isAll) chatStorage.all.messagesHtml.push(netErrHtml);
+        else if (currentVideoId) chatStorage.videos[currentVideoId].messagesHtml.push(netErrHtml);
+        renderChatMessagesForCurrentScope();
     }
 }
 
@@ -1789,43 +1931,14 @@ function toggleMessageCollapse(elem) {
     }
 }
 
-let allAnswersCollapsed = false;
-function toggleAllAnswers() {
-    allAnswersCollapsed = !allAnswersCollapsed;
-    const messages = document.querySelectorAll(".message.assistant");
-    const btn = document.getElementById("btnToggleAllAnswers");
-    if (btn) {
-        btn.innerHTML = allAnswersCollapsed 
-            ? `<i class="fa-solid fa-expand"></i> <span>Show All</span>` 
-            : `<i class="fa-solid fa-compress"></i> <span>Hide All</span>`;
-    }
-
-    messages.forEach(card => {
-        const body = card.querySelector(".message-answer-body");
-        const meta = card.querySelector(".message-meta");
-        const toggleBtn = card.querySelector(".btn-chat-action");
-        if (body) {
-            body.style.display = allAnswersCollapsed ? "none" : "block";
-            if (meta) meta.style.display = allAnswersCollapsed ? "none" : "flex";
-            if (toggleBtn) {
-                toggleBtn.innerHTML = allAnswersCollapsed ? `<i class="fa-solid fa-chevron-down"></i>` : `<i class="fa-solid fa-chevron-up"></i>`;
-            }
-        }
-    });
-}
-
 function clearChatMessages() {
-    const chatMessages = document.getElementById("chatMessages");
-    if (chatMessages) {
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                <div style="font-weight: 600; color: #38bdf8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
-                    <i class="fa-solid fa-shield-halved"></i> Cross-Video Intelligence Active
-                </div>
-                Chat cleared. Ask anything across all uploaded videos, trace persons across camera feeds, or search dialogue and visual scenes.
-            </div>
-        `;
+    if (chatScope === 'all') {
+        chatStorage.all.sessionId = null;
+        chatStorage.all.messagesHtml = [];
+    } else if (chatScope === 'current' && currentVideoId) {
+        chatStorage.videos[currentVideoId] = { sessionId: null, messagesHtml: [] };
     }
+    renderChatMessagesForCurrentScope();
 }
 
 // =========================================================================
