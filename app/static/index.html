@@ -1803,6 +1803,291 @@
             background: rgba(239, 68, 68, 0.25);
             color: #fca5a5;
         }
+
+        /* Video Classification Badges */
+        .badge-classification {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.2rem 0.65rem;
+            border-radius: 9999px;
+            letter-spacing: 0.02em;
+            transition: all var(--transition-fast);
+        }
+        .badge-classification-knowledge {
+            background: rgba(99, 102, 241, 0.18);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.38);
+        }
+        .badge-classification-observational {
+            background: rgba(245, 158, 11, 0.18);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.38);
+        }
+
+        /* Learning Assessment Tabs */
+        .tab-btn-learning {
+            position: relative;
+        }
+        .tab-btn-learning::after {
+            content: "";
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #818cf8;
+        }
+
+        /* Quiz Container & Cards */
+        .quiz-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1rem;
+            overflow-y: auto;
+            max-height: 100%;
+        }
+
+        .quiz-config-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.85rem;
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .config-label {
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .config-select {
+            background: rgba(30, 41, 59, 0.75);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.45rem 0.75rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.84rem;
+            outline: none;
+            cursor: pointer;
+            transition: border-color var(--transition-fast);
+        }
+        .config-select:focus {
+            border-color: var(--primary);
+        }
+
+        .btn-generate-quiz {
+            background: linear-gradient(135deg, #6366f1, #38bdf8);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 0.88rem;
+            padding: 0.65rem 1.25rem;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+            transition: all var(--transition-fast);
+        }
+        .btn-generate-quiz:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+        }
+
+        /* Active Quiz Taking UI */
+        .quiz-taking-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+        }
+
+        .quiz-progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .quiz-progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #38bdf8);
+            border-radius: 9999px;
+            transition: width 240ms ease;
+        }
+
+        .quiz-question-card {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .quiz-option-btn {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all var(--transition-fast);
+        }
+        .quiz-option-btn:hover {
+            background: rgba(56, 189, 248, 0.12);
+            border-color: rgba(56, 189, 248, 0.35);
+        }
+        .quiz-option-btn.selected {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: #818cf8;
+            color: #ffffff;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+        }
+
+        .quiz-nav-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.5rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Quiz Evaluation & Report Dashboard */
+        .quiz-eval-banner {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .eval-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 0.75rem;
+        }
+        .eval-stat-item {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem;
+            text-align: center;
+        }
+        .eval-stat-val {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+        .eval-stat-label {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .topic-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
+            border-radius: var(--radius-xs);
+        }
+        .topic-pill-strong {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+        .topic-pill-weak {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        /* Smart Relearn Card */
+        .relearn-box {
+            background: rgba(2, 132, 199, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: var(--radius-sm);
+            padding: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .btn-relearn {
+            background: linear-gradient(135deg, #0284c7, #06b6d4);
+            color: #ffffff;
+            border: none;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.4rem 0.75rem;
+            border-radius: var(--radius-xs);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all var(--transition-fast);
+        }
+        .btn-relearn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
+        }
+
+        .btn-pdf-action {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 0.45rem 0.85rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            transition: all var(--transition-fast);
+        }
+        .btn-pdf-action:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -1958,7 +2243,11 @@
                     <span class="player-title-text" id="playerTitle">Select a video from library</span>
                 </div>
                 <div class="player-actions">
-                    <div id="playerMetaBadge" style="display: none;">
+                    <div id="playerMetaBadge" style="display: none; display: flex; align-items: center; gap: 0.45rem;">
+                        <span class="badge-classification badge-classification-knowledge" id="playerVideoTypeBadge" style="display: none;">
+                            <i class="fa-solid fa-graduation-cap" id="playerVideoTypeIcon"></i>
+                            <span id="playerVideoTypeText">Video Type: Learning / Knowledge Content</span>
+                        </span>
                         <span class="badge badge-completed" id="playerDurationText">00:00</span>
                     </div>
 
@@ -2001,7 +2290,11 @@
             <!-- Inspector Tabs Directly Under Video Player -->
             <div class="inspector-panel">
                 <div class="inspector-tabs">
-                    <button class="tab-btn active" id="tabBtnTranscript" onclick="switchTab('transcript')">
+                    <button class="tab-btn active" id="tabBtnOverview" onclick="switchTab('overview')">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span>Summary</span>
+                    </button>
+                    <button class="tab-btn" id="tabBtnTranscript" onclick="switchTab('transcript')">
                         <i class="fa-solid fa-microphone-lines"></i>
                         <span>Transcript</span>
                         <span class="tab-badge" id="tabTranscriptBadge">0</span>
@@ -2011,22 +2304,34 @@
                         <span>Visual Scenes</span>
                         <span class="tab-badge" id="tabVisualsBadge">0</span>
                     </button>
-                    <button class="tab-btn" id="tabBtnOverview" onclick="switchTab('overview')">
-                        <i class="fa-solid fa-file-lines"></i>
-                        <span>Overview</span>
+                    <button class="tab-btn tab-btn-learning" id="tabBtnQuiz" onclick="switchTab('quiz')" style="display: none;">
+                        <i class="fa-solid fa-graduation-cap" style="color: #818cf8;"></i>
+                        <span>Generate Quiz</span>
+                    </button>
+                    <button class="tab-btn tab-btn-learning" id="tabBtnSelfTest" onclick="switchTab('selftest')" style="display: none;">
+                        <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
+                        <span>Test My Understanding</span>
                     </button>
                 </div>
 
                 <!-- Tab Panes -->
-                <!-- Pane 1: Transcript -->
-                <div class="tab-pane" id="paneTranscript" style="display: flex;">
+                <!-- Pane 1: Overview (Summary, Key Moments) -->
+                <div class="tab-pane" id="paneOverview" style="display: flex;">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-file-lines fa-2x"></i>
+                        <p>Select a video to view executive summary and timeline.</p>
+                    </div>
+                </div>
+
+                <!-- Pane 2: Transcript -->
+                <div class="tab-pane" id="paneTranscript" style="display: none;">
                     <div class="empty-state">
                         <i class="fa-solid fa-microphone-lines fa-2x"></i>
                         <p>Select a video to view synchronized speech & verbatim utterances.</p>
                     </div>
                 </div>
 
-                <!-- Pane 2: Visual Scenes -->
+                <!-- Pane 3: Visual Scenes -->
                 <div class="tab-pane" id="paneVisuals" style="display: none;">
                     <div class="empty-state">
                         <i class="fa-solid fa-camera fa-2x"></i>
@@ -2034,11 +2339,153 @@
                     </div>
                 </div>
 
-                <!-- Pane 3: Overview (Summary, Key Moments, Multimodal Timeline) -->
-                <div class="tab-pane" id="paneOverview" style="display: none;">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-file-lines fa-2x"></i>
-                        <p>Select a video to view executive summary and timeline.</p>
+                <!-- Pane 4: Quiz & Knowledge Assessment -->
+                <div class="tab-pane" id="paneQuiz" style="display: none;">
+                    <div class="quiz-container" id="quizContainer">
+                        <!-- 1. Quiz Config Screen -->
+                        <div class="quiz-config-card" id="quizConfigCard">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <div style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
+                                        <i class="fa-solid fa-graduation-cap" style="color: #818cf8;"></i>
+                                        <span>Video Knowledge Quiz Generator</span>
+                                    </div>
+                                    <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                        Generate assessment questions strictly grounded in this video's actual speech, slides, and demonstration.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="config-grid">
+                                <div class="config-group">
+                                    <label class="config-label">Questions</label>
+                                    <select class="config-select" id="quizNumQuestions">
+                                        <option value="5" selected>5 Questions</option>
+                                        <option value="10">10 Questions</option>
+                                        <option value="15">15 Questions</option>
+                                    </select>
+                                </div>
+                                <div class="config-group">
+                                    <label class="config-label">Difficulty</label>
+                                    <select class="config-select" id="quizDifficulty">
+                                        <option value="easy">Easy (Direct Facts)</option>
+                                        <option value="medium" selected>Medium (Application)</option>
+                                        <option value="hard">Hard (Deep Synthesis)</option>
+                                    </select>
+                                </div>
+                                <div class="config-group">
+                                    <label class="config-label">Question Type</label>
+                                    <select class="config-select" id="quizQuestionType">
+                                        <option value="mixed" selected>Mixed (MCQ + T/F + Short)</option>
+                                        <option value="mcq">Multiple Choice (MCQ)</option>
+                                        <option value="true_false">True / False</option>
+                                        <option value="short_answer">Short Answer</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                                <button class="btn-generate-quiz" id="btnStartGenerateQuiz" onclick="generateQuizForActiveVideo()">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                    <span>Generate Quiz</span>
+                                </button>
+                                <span id="quizGenStatus" style="font-size: 0.78rem; color: var(--text-muted); display: none;">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Grounding questions in video segments...
+                                </span>
+                            </div>
+
+                            <!-- List of Past Quizzes -->
+                            <div id="pastQuizzesSection" style="margin-top: 0.5rem; display: none;">
+                                <div style="font-size: 0.74rem; font-weight: 700; color: var(--text-dark); text-transform: uppercase; margin-bottom: 0.4rem;">
+                                    Available Quizzes for this Video
+                                </div>
+                                <div id="pastQuizzesList" style="display: flex; flex-direction: column; gap: 0.4rem;"></div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Active Quiz Taking Screen -->
+                        <div class="quiz-taking-wrap" id="quizTakingWrap" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 0.8rem; font-weight: 700; color: #818cf8;" id="quizTakingProgressText">
+                                    Question 1 of 5
+                                </div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 0.15rem 0.5rem; border-radius: var(--radius-xs);" id="quizTakingTopicBadge">
+                                    Topic
+                                </div>
+                            </div>
+                            <div class="quiz-progress-bar-bg">
+                                <div class="quiz-progress-bar-fill" id="quizTakingProgressBar" style="width: 20%;"></div>
+                            </div>
+
+                            <div class="quiz-question-card">
+                                <div style="font-size: 1rem; font-weight: 700; color: #f8fafc; line-height: 1.45;" id="quizQuestionText">
+                                    Question loading...
+                                </div>
+                                <div id="quizOptionsContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <!-- Dynamic options or textarea -->
+                                </div>
+                            </div>
+
+                            <div class="quiz-nav-row">
+                                <button class="filter-pill" id="btnQuizPrev" onclick="navQuizQuestion(-1)">
+                                    <i class="fa-solid fa-arrow-left"></i> Previous
+                                </button>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <button class="filter-pill" onclick="cancelQuizTaking()">Cancel</button>
+                                    <button class="filter-pill" id="btnQuizNext" onclick="navQuizQuestion(1)">
+                                        Next <i class="fa-solid fa-arrow-right"></i>
+                                    </button>
+                                    <button class="btn-generate-quiz" id="btnQuizSubmit" onclick="submitQuizAnswers()" style="display: none; padding: 0.4rem 0.9rem; font-size: 0.8rem;">
+                                        <i class="fa-solid fa-check-circle"></i> Submit Quiz
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Quiz Evaluation & Report Dashboard -->
+                        <div id="quizEvaluationWrap" style="display: none; flex-direction: column; gap: 1rem;">
+                            <!-- Populated dynamically by renderQuizEvaluation() -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pane 5: Test My Understanding -->
+                <div class="tab-pane" id="paneSelfTest" style="display: none;">
+                    <div class="quiz-container">
+                        <div class="quiz-config-card">
+                            <div style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
+                                <span>Test My Understanding</span>
+                            </div>
+                            <p style="font-size: 0.78rem; color: var(--text-muted);">
+                                Frame a concept question in your own words and write your explanation. The system evaluates your understanding against the uploaded video and guides you to the exact timestamp to relearn if needed.
+                            </p>
+
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div class="config-group">
+                                    <label class="config-label">Question / Topic</label>
+                                    <input type="text" class="config-select" id="selfTestQuestionInput" placeholder="e.g. What is RAG? or Explain Saksham LMS in simple words...">
+                                </div>
+                                <div class="config-group">
+                                    <label class="config-label">Your Written Explanation</label>
+                                    <textarea class="config-select" id="selfTestAnswerInput" rows="3" placeholder="Write your understanding here based on the video..."></textarea>
+                                </div>
+                                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                    <button class="btn-generate-quiz" id="btnSubmitSelfTest" onclick="submitSelfTest()">
+                                        <i class="fa-solid fa-check-double"></i>
+                                        <span>Evaluate My Understanding</span>
+                                    </button>
+                                    <span id="selfTestSpinner" style="display: none; font-size: 0.78rem; color: var(--text-muted);">
+                                        <i class="fa-solid fa-spinner fa-spin"></i> Grounding in video evidence...
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Self Test Result Card -->
+                        <div id="selfTestResultCard" style="display: none;">
+                            <!-- Populated dynamically by renderSelfTestResult() -->
+                        </div>
                     </div>
                 </div>
             </div>

@@ -23,6 +23,10 @@ class VideoStatusResponse(BaseModel):
     current_stage: Optional[str] = None
     error_message: Optional[str] = None
     duration_seconds: Optional[float] = None
+    video_type: Optional[str] = "knowledge"
+    video_type_label: Optional[str] = "Learning / Knowledge Content"
+    video_type_confidence: Optional[float] = 0.90
+    video_type_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -49,7 +53,12 @@ class VideoDetailResponse(BaseModel):
     status: VideoStatus
     progress_pct: int
     summary: Optional[str] = None
+    video_type: Optional[str] = "knowledge"
+    video_type_label: Optional[str] = "Learning / Knowledge Content"
+    video_type_confidence: Optional[float] = 0.90
+    video_type_reason: Optional[str] = None
     raw_transcripts: Optional[List[TranscriptUtterance]] = []
     created_at: datetime
     segments_count: int = 0
     segments: List[VideoSegmentResponse] = []
+

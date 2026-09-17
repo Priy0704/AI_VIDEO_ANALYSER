@@ -27,12 +27,16 @@ async def init_db() -> None:
     """Initialize database tables and apply backward-compatible schema updates."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Ensure ocr_text column exists if table was created in earlier schema version
-        try:
-            await conn.execute(text("ALTER TABLE video_segments ADD COLUMN ocr_text TEXT;"))
-        except Exception:
-            pass  # Already exists or dialect handles it
-        logger.info("Database tables initialized successfully.")
+
+    # In PostgreSQL, apply ALTER TABLE with IF NOT EXISTS to guarantee smooth migration
+    async with engine.begin() as conn:
+        await conn.execute(text("ALTER TABLE video_segments ADD COLUMN IF NOT EXISTS ocr_text TEXT;"))
+        await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type VARCHAR(50) DEFAULT 'knowledge';"))
+        await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type_label VARCHAR(100) DEFAULT 'Learning / Knowledge Content';"))
+        await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type_confidence FLOAT DEFAULT 0.90;"))
+        await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type_reason TEXT;"))
+
+    logger.info("Database tables initialized successfully.")
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

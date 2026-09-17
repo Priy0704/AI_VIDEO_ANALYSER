@@ -10,6 +10,7 @@ from app.services.video_processor import VideoProcessor
 from app.services.audio_transcriber import AudioTranscriber
 from app.services.vision_describer import VisionDescriber
 from app.services.fusion_indexer import FusionIndexer
+from app.services.video_classifier import VideoClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class VideoTaskQueue:
         self.audio_transcriber = AudioTranscriber()
         self.vision_describer = VisionDescriber()
         self.fusion_indexer = FusionIndexer()
+        self.video_classifier = VideoClassifier()
         self.active_tasks: Dict[str, asyncio.Task] = {}
 
     def enqueue_video_processing(self, video_id: str, video_path: Path) -> None:
@@ -128,7 +130,27 @@ class VideoTaskQueue:
                 visuals=visual_observations
             )
 
-        logger.info(f"Pipeline completed successfully for video {video_id}")
+            # 6. Video Type Classification (Knowledge vs Observational)
+            await self._update_video_progress(
+                video_id, VideoStatus.PROCESSING, 96, "Classifying Video Content"
+            )
+            classification = await self.video_classifier.classify_video(
+                filename=video.filename,
+                transcripts=[t.text for t in transcripts],
+                visual_descriptions=[v.description for v in visual_observations],
+                ocr_texts=[getattr(v, "ocr_text", "") for v in visual_observations],
+                summary=video.summary
+            )
+            video.video_type = classification.video_type
+            video.video_type_label = classification.label
+            video.video_type_confidence = classification.confidence
+            video.video_type_reason = classification.reason
+            await db.commit()
+
+        await self._update_video_progress(
+            video_id, VideoStatus.COMPLETED, 100, "Completed"
+        )
+        logger.info(f"Pipeline completed successfully for video {video_id} (classified as: {classification.label})")
 
     async def _process_video_pipeline(self, video_id: str, video_path: Path) -> None:
         """Worker executing the full perception and indexing pipeline under semaphore."""

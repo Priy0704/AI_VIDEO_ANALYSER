@@ -584,6 +584,13 @@ function renderLibraryList() {
             statusBadge = `<span style="color: #38bdf8;"><i class="fa-solid fa-spinner fa-spin"></i> ${v.progress_pct || 0}%</span>`;
         }
 
+        let typeBadge = '';
+        if (v.video_type === 'observational') {
+            typeBadge = `<span class="badge-type-observational" style="font-size:0.62rem; padding: 0.1rem 0.4rem; border-radius: 9999px;"><i class="fa-solid fa-video"></i> Observational</span>`;
+        } else if (v.video_type === 'knowledge') {
+            typeBadge = `<span class="badge-type-knowledge" style="font-size:0.62rem; padding: 0.1rem 0.4rem; border-radius: 9999px;"><i class="fa-solid fa-graduation-cap"></i> Learning</span>`;
+        }
+
         return `
             <div class="video-card ${isSelected ? 'active' : ''}" onclick="selectVideo('${v.video_id}')">
                 <div class="video-thumb-wrap">
@@ -594,6 +601,7 @@ function renderLibraryList() {
                     <div class="video-card-meta">
                         <span><i class="fa-regular fa-clock"></i> ${v.duration_seconds ? formatSeconds(v.duration_seconds) : 'N/A'}</span>
                         <span class="video-card-status">${statusBadge}</span>
+                        ${typeBadge}
                     </div>
                 </div>
                 <button class="btn-delete-card" title="Delete video" onclick="deleteVideo(event, '${v.video_id}')">
@@ -715,8 +723,19 @@ async function selectVideo(videoId, forceRefresh = false) {
         document.getElementById("tabTranscriptBadge").innerText = transcriptCount;
         document.getElementById("tabVisualsBadge").innerText = visualSegments.length;
 
+        // Update Classification Badge and Learning Tabs
+        updateVideoTypeBadge(currentVideoData);
+        updateLearningTabsVisibility(currentVideoData);
+        if (currentVideoData.video_type !== 'observational') {
+            loadPastQuizzes(videoId);
+        }
+
         // Auto select tab
-        if (transcriptCount > 0) {
+        if (currentActiveTab === 'quiz' || currentActiveTab === 'selfTest') {
+            if (currentVideoData.video_type === 'observational') {
+                currentActiveTab = transcriptCount > 0 ? 'transcript' : 'visuals';
+            }
+        } else if (transcriptCount > 0) {
             currentActiveTab = 'transcript';
         } else {
             currentActiveTab = 'visuals';
@@ -738,18 +757,26 @@ function switchTab(tabName) {
     const btnTranscript = document.getElementById("tabBtnTranscript");
     const btnVisuals = document.getElementById("tabBtnVisuals");
     const btnOverview = document.getElementById("tabBtnOverview");
+    const btnQuiz = document.getElementById("tabBtnQuiz");
+    const btnSelfTest = document.getElementById("tabBtnSelfTest");
 
     if (btnTranscript) btnTranscript.classList.toggle("active", tabName === 'transcript');
     if (btnVisuals) btnVisuals.classList.toggle("active", tabName === 'visuals');
     if (btnOverview) btnOverview.classList.toggle("active", tabName === 'overview');
+    if (btnQuiz) btnQuiz.classList.toggle("active", tabName === 'quiz');
+    if (btnSelfTest) btnSelfTest.classList.toggle("active", tabName === 'selfTest');
 
     const paneTranscript = document.getElementById("paneTranscript");
     const paneVisuals = document.getElementById("paneVisuals");
     const paneOverview = document.getElementById("paneOverview");
+    const paneQuiz = document.getElementById("paneQuiz");
+    const paneSelfTest = document.getElementById("paneSelfTest");
 
     if (paneTranscript) paneTranscript.style.display = (tabName === 'transcript' ? 'flex' : 'none');
     if (paneVisuals) paneVisuals.style.display = (tabName === 'visuals' ? 'flex' : 'none');
     if (paneOverview) paneOverview.style.display = (tabName === 'overview' ? 'flex' : 'none');
+    if (paneQuiz) paneQuiz.style.display = (tabName === 'quiz' ? 'flex' : 'none');
+    if (paneSelfTest) paneSelfTest.style.display = (tabName === 'selfTest' ? 'flex' : 'none');
 
     setTimeout(() => {
         handleVideoTimeUpdate();
@@ -2050,5 +2077,683 @@ async function resolveHITL(id, approved) {
         }
     } catch (e) {
         console.error("Error resolving HITL:", e);
+    }
+}
+
+// =========================================================================
+// Video Classification & Learning Gate
+// =========================================================================
+function updateVideoTypeBadge(video) {
+    const badge = document.getElementById("playerVideoTypeBadge");
+    if (!badge) return;
+
+    if (!video || !video.video_type) {
+        badge.className = "video-type-badge";
+        badge.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing Video Type...`;
+        badge.title = "Multimodal classification in progress...";
+        return;
+    }
+
+    if (video.video_type === 'knowledge') {
+        badge.className = "video-type-badge badge-type-knowledge";
+        const label = video.video_type_label || 'Knowledge / Content-based';
+        badge.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> ${escapeHtml(label)}`;
+        badge.title = video.video_type_reason || 'Educational, training, presentation, or meeting content with structured learning features enabled.';
+    } else if (video.video_type === 'observational') {
+        badge.className = "video-type-badge badge-type-observational";
+        const label = video.video_type_label || 'Observational / Surveillance';
+        badge.innerHTML = `<i class="fa-solid fa-video"></i> ${escapeHtml(label)}`;
+        badge.title = video.video_type_reason || 'CCTV, traffic, security, or dashcam observational footage. Assessment quizzes are disabled.';
+    } else {
+        badge.className = "video-type-badge";
+        badge.innerHTML = `<i class="fa-solid fa-film"></i> General Video`;
+        badge.title = "Standard video stream.";
+    }
+}
+
+function updateLearningTabsVisibility(video) {
+    const tabQuiz = document.getElementById("tabBtnQuiz");
+    const tabSelfTest = document.getElementById("tabBtnSelfTest");
+    if (!tabQuiz || !tabSelfTest) return;
+
+    const isObservational = (video && video.video_type === 'observational');
+    if (isObservational) {
+        tabQuiz.style.display = "none";
+        tabSelfTest.style.display = "none";
+        // If user was on quiz or self-test pane, switch away
+        if (currentActiveTab === 'quiz' || currentActiveTab === 'selfTest') {
+            switchTab('transcript');
+        }
+    } else {
+        tabQuiz.style.display = "inline-flex";
+        tabSelfTest.style.display = "inline-flex";
+    }
+}
+
+// =========================================================================
+// Interactive Quiz & Assessment System
+// =========================================================================
+let activeQuiz = null;
+let activeQuestions = [];
+let currentQuestionIndex = 0;
+let userQuizAnswers = {};
+let lastQuizAttempt = null;
+
+async function loadPastQuizzes(videoId) {
+    const section = document.getElementById("pastQuizzesSection");
+    const list = document.getElementById("pastQuizzesList");
+    if (!section || !list || !videoId) return;
+
+    try {
+        const res = await fetch(`/api/v1/videos/${videoId}/quizzes`);
+        if (!res.ok) return;
+        const quizzes = await res.json();
+        if (quizzes.length === 0) {
+            section.style.display = "none";
+            return;
+        }
+
+        section.style.display = "block";
+        list.innerHTML = quizzes.map(q => `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: var(--radius-xs);">
+                <div>
+                    <span style="font-weight: 600; color: #f1f5f9; font-size: 0.76rem;">${escapeHtml(q.title || 'Knowledge Assessment')}</span>
+                    <span style="font-size: 0.68rem; color: var(--text-muted); margin-left: 0.5rem;">(${q.total_questions} questions · ${q.difficulty} · ${q.question_type})</span>
+                </div>
+                <div style="display: flex; gap: 0.4rem;">
+                    <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="loadAndStartQuiz('${q.id}')">
+                        Take Quiz
+                    </button>
+                    <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="downloadQuestionPaperPdf('${q.id}')" title="Download Question Paper PDF">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </button>
+                </div>
+            </div>
+        `).join("");
+    } catch (e) {
+        console.error("Error loading past quizzes:", e);
+    }
+}
+
+async function generateQuizForActiveVideo() {
+    if (!currentVideoId) {
+        alert("Please select a video first.");
+        return;
+    }
+
+    if (currentVideoData && currentVideoData.video_type === 'observational') {
+        alert("Quizzes are disabled for observational / surveillance footage.");
+        return;
+    }
+
+    const numQuestions = parseInt(document.getElementById("quizNumQuestions")?.value || "5", 10);
+    const difficulty = document.getElementById("quizDifficulty")?.value || "medium";
+    const questionType = document.getElementById("quizQuestionType")?.value || "mixed";
+
+    const btn = document.getElementById("btnStartGenerateQuiz");
+    const status = document.getElementById("quizGenStatus");
+
+    if (btn) btn.disabled = true;
+    if (status) status.style.display = "inline-flex";
+
+    try {
+        const res = await fetch(`/api/v1/videos/${currentVideoId}/quiz/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                num_questions: numQuestions,
+                difficulty: difficulty,
+                question_type: questionType
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Failed to generate quiz.");
+        }
+
+        const quizData = await res.json();
+        startQuizTaking(quizData);
+    } catch (e) {
+        console.error("Error generating quiz:", e);
+        alert(e.message || "Could not generate quiz. Ensure video analysis is complete.");
+    } finally {
+        if (btn) btn.disabled = false;
+        if (status) status.style.display = "none";
+    }
+}
+
+async function loadAndStartQuiz(quizId) {
+    try {
+        const res = await fetch(`/api/v1/quizzes/${quizId}`);
+        if (!res.ok) throw new Error("Quiz not found.");
+        const quizData = await res.json();
+        startQuizTaking(quizData);
+    } catch (e) {
+        console.error("Error loading quiz:", e);
+        alert("Could not load quiz.");
+    }
+}
+
+function startQuizTaking(quizData) {
+    activeQuiz = quizData;
+    activeQuestions = quizData.questions || [];
+    currentQuestionIndex = 0;
+    userQuizAnswers = {};
+    lastQuizAttempt = null;
+
+    if (activeQuestions.length === 0) {
+        alert("Quiz contains no questions.");
+        return;
+    }
+
+    document.getElementById("quizConfigCard").style.display = "none";
+    document.getElementById("quizEvaluationWrap").style.display = "none";
+    document.getElementById("quizTakingWrap").style.display = "block";
+
+    renderQuizQuestion(0);
+}
+
+function renderQuizQuestion(index) {
+    if (!activeQuestions || index < 0 || index >= activeQuestions.length) return;
+    currentQuestionIndex = index;
+
+    const q = activeQuestions[index];
+    const total = activeQuestions.length;
+
+    // Progress
+    const progText = document.getElementById("quizTakingProgressText");
+    if (progText) progText.innerText = `Question ${index + 1} of ${total}`;
+
+    const progBar = document.getElementById("quizTakingProgressBar");
+    if (progBar) progBar.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
+
+    const topicBadge = document.getElementById("quizTakingTopicBadge");
+    if (topicBadge) topicBadge.innerText = q.topic || "General";
+
+    // Question Text
+    const qText = document.getElementById("quizQuestionText");
+    if (qText) qText.innerText = q.question_text;
+
+    // Options or Text Area
+    const container = document.getElementById("quizOptionsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const userAns = userQuizAnswers[q.id] || "";
+
+    if (q.question_type === 'short_answer') {
+        container.innerHTML = `
+            <div style="margin-top: 0.5rem;">
+                <textarea 
+                    class="config-select" 
+                    rows="3" 
+                    placeholder="Type your answer here..."
+                    oninput="handleShortAnswerChange('${q.id}', this.value)"
+                    style="width: 100%; font-size: 0.82rem; resize: vertical;"
+                >${escapeHtml(userAns)}</textarea>
+            </div>
+        `;
+    } else {
+        // MCQ or True/False
+        let options = q.options;
+        if (typeof options === "string") {
+            try { options = JSON.parse(options); } catch { options = {}; }
+        }
+        if (!options || typeof options !== "object") options = {};
+
+        const optionKeys = Object.keys(options).sort();
+        const html = optionKeys.map(k => {
+            const isSelected = (userAns === k);
+            return `
+                <div class="quiz-option-item ${isSelected ? 'selected' : ''}" onclick="selectQuizOption('${q.id}', '${escapeHtml(k)}')">
+                    <span class="quiz-option-indicator">${escapeHtml(k)}</span>
+                    <div class="quiz-option-text">${escapeHtml(options[k])}</div>
+                </div>
+            `;
+        }).join("");
+        container.innerHTML = html;
+    }
+
+    // Navigation buttons
+    const btnPrev = document.getElementById("btnQuizPrev");
+    const btnNext = document.getElementById("btnQuizNext");
+    const btnSubmit = document.getElementById("btnQuizSubmit");
+
+    if (btnPrev) btnPrev.disabled = (index === 0);
+    if (index === total - 1) {
+        if (btnNext) btnNext.style.display = "none";
+        if (btnSubmit) btnSubmit.style.display = "inline-flex";
+    } else {
+        if (btnNext) btnNext.style.display = "inline-flex";
+        if (btnSubmit) btnSubmit.style.display = "none";
+    }
+}
+
+function selectQuizOption(questionId, optionKey) {
+    userQuizAnswers[questionId] = optionKey;
+    renderQuizQuestion(currentQuestionIndex);
+}
+
+function handleShortAnswerChange(questionId, val) {
+    userQuizAnswers[questionId] = val.trim();
+}
+
+function navQuizQuestion(delta) {
+    const newIdx = currentQuestionIndex + delta;
+    if (newIdx >= 0 && newIdx < activeQuestions.length) {
+        renderQuizQuestion(newIdx);
+    }
+}
+
+function cancelQuizTaking() {
+    if (confirm("Exit quiz? Your current answers will be discarded.")) {
+        resetQuizToConfig();
+    }
+}
+
+function resetQuizToConfig() {
+    activeQuiz = null;
+    activeQuestions = [];
+    userQuizAnswers = {};
+    currentQuestionIndex = 0;
+
+    document.getElementById("quizTakingWrap").style.display = "none";
+    document.getElementById("quizEvaluationWrap").style.display = "none";
+    document.getElementById("quizConfigCard").style.display = "block";
+
+    if (currentVideoId) {
+        loadPastQuizzes(currentVideoId);
+    }
+}
+
+async function submitQuizAnswers() {
+    if (!activeQuiz) return;
+
+    const btnSubmit = document.getElementById("btnQuizSubmit");
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Evaluating...`;
+    }
+
+    try {
+        const res = await fetch(`/api/v1/quizzes/${activeQuiz.id}/submit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                answers: userQuizAnswers
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Submission failed.");
+        }
+
+        const report = await res.json();
+        lastQuizAttempt = report;
+        renderQuizEvaluation(report);
+    } catch (e) {
+        console.error("Error submitting quiz:", e);
+        alert(e.message || "Failed to submit quiz.");
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = `<i class="fa-solid fa-check-circle"></i> Submit Quiz`;
+        }
+    }
+}
+
+function renderQuizEvaluation(report) {
+    document.getElementById("quizTakingWrap").style.display = "none";
+    document.getElementById("quizConfigCard").style.display = "none";
+    const evalWrap = document.getElementById("quizEvaluationWrap");
+    evalWrap.style.display = "flex";
+
+    const pct = report.percentage || 0;
+    const isPassed = pct >= 70;
+
+    const strongAreas = report.strong_areas || [];
+    const needsImprovement = report.needs_improvement || [];
+    const questionResults = report.question_results || [];
+
+    const strongHtml = strongAreas.length > 0
+        ? strongAreas.map(t => `<span class="topic-tag strong"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(t)}</span>`).join("")
+        : `<span style="font-size: 0.74rem; color: var(--text-dark);">No topics identified yet.</span>`;
+
+    const weakHtml = needsImprovement.length > 0
+        ? needsImprovement.map(t => `<span class="topic-tag weak"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(t)}</span>`).join("")
+        : `<span style="font-size: 0.74rem; color: #34d399;"><i class="fa-solid fa-trophy"></i> Outstanding! No weak areas.</span>`;
+
+    const questionsHtml = questionResults.map((qr, idx) => {
+        const isCorrect = qr.is_correct;
+        const isUnanswered = qr.status === 'unanswered';
+        const cardClass = isCorrect ? 'correct' : (isUnanswered ? 'unanswered' : 'incorrect');
+
+        let statusBadge = '';
+        if (isCorrect) {
+            statusBadge = `<span style="color: #34d399; font-weight: 700; font-size: 0.74rem;"><i class="fa-solid fa-check-circle"></i> Correct (+1)</span>`;
+        } else if (isUnanswered) {
+            statusBadge = `<span style="color: #94a3b8; font-weight: 700; font-size: 0.74rem;"><i class="fa-solid fa-circle-minus"></i> Unanswered (0)</span>`;
+        } else {
+            statusBadge = `<span style="color: #f87171; font-weight: 700; font-size: 0.74rem;"><i class="fa-solid fa-circle-xmark"></i> Incorrect (0)</span>`;
+        }
+
+        // Smart Relearn button for incorrect or unanswered questions
+        let relearnBtn = '';
+        if (!isCorrect && qr.timestamp_start !== null && qr.timestamp_start !== undefined) {
+            const timeFormatted = formatSeconds(qr.timestamp_start);
+            relearnBtn = `
+                <div class="relearn-callout">
+                    <div class="relearn-callout-title">
+                        <i class="fa-solid fa-compass" style="color: #38bdf8;"></i>
+                        <span>Targeted Video Relearn Segment</span>
+                    </div>
+                    <div style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+                        Watch the exact lesson segment where this concept is demonstrated in the video.
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <button class="btn-watch-relearn" onclick="seekAndPlayVideo(${qr.timestamp_start})">
+                            <i class="fa-solid fa-play"></i>
+                            <span>Watch &amp; Learn Again at ${timeFormatted}</span>
+                        </button>
+                        <button class="filter-pill" style="font-size: 0.72rem; padding: 0.3rem 0.65rem;" onclick="retrySingleQuestion(${idx})">
+                            <i class="fa-solid fa-rotate-right"></i> Try Again
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="eval-question-card ${cardClass}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">
+                    <div style="font-size: 0.72rem; font-weight: 700; color: #818cf8; text-transform: uppercase;">
+                        Question ${idx + 1} · <span style="color: var(--text-muted);">${escapeHtml(qr.topic || 'General')}</span>
+                    </div>
+                    ${statusBadge}
+                </div>
+                <div style="font-size: 0.88rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.5rem;">
+                    ${escapeHtml(qr.question_text)}
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.75rem; margin-bottom: 0.5rem;">
+                    <div style="background: rgba(255,255,255,0.02); padding: 0.35rem 0.5rem; border-radius: var(--radius-xs);">
+                        <strong style="color: var(--text-muted);">Your Answer:</strong> 
+                        <span style="color: ${isCorrect ? '#34d399' : '#f87171'}; font-weight: 600;">${escapeHtml(qr.user_answer || '(None)')}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.02); padding: 0.35rem 0.5rem; border-radius: var(--radius-xs);">
+                        <strong style="color: var(--text-muted);">Correct Answer:</strong> 
+                        <span style="color: #34d399; font-weight: 600;">${escapeHtml(qr.correct_answer || 'N/A')}</span>
+                    </div>
+                </div>
+                <div style="font-size: 0.74rem; color: #cbd5e1; line-height: 1.45; background: rgba(0,0,0,0.2); padding: 0.45rem 0.6rem; border-radius: var(--radius-xs);">
+                    <strong style="color: #93c5fd;">Explanation:</strong> ${escapeHtml(qr.explanation || 'No explanation provided.')}
+                </div>
+                ${relearnBtn}
+            </div>
+        `;
+    }).join("");
+
+    evalWrap.innerHTML = `
+        <div class="scorecard-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                    <div style="font-size: 1.1rem; font-weight: 800; color: #f8fafc;">Knowledge Evaluation Report</div>
+                    <div style="font-size: 0.74rem; color: var(--text-muted);">Strictly grounded against analyzed video segments and timestamps</div>
+                </div>
+                <div class="scorecard-metric" style="min-width: 140px;">
+                    <div class="scorecard-value ${isPassed ? 'good' : 'warning'}">${report.score} / ${report.total_questions}</div>
+                    <div class="scorecard-label">${pct}% Overall Accuracy</div>
+                </div>
+            </div>
+
+            <div class="scorecard-grid">
+                <div class="scorecard-metric">
+                    <div class="scorecard-value good">${report.correct_count}</div>
+                    <div class="scorecard-label">Correct</div>
+                </div>
+                <div class="scorecard-metric">
+                    <div class="scorecard-value bad">${report.incorrect_count}</div>
+                    <div class="scorecard-label">Incorrect</div>
+                </div>
+                <div class="scorecard-metric">
+                    <div class="scorecard-value neutral">${report.unanswered_count}</div>
+                    <div class="scorecard-label">Unanswered</div>
+                </div>
+            </div>
+
+            <div class="topic-diagnostic-card">
+                <div style="font-size: 0.76rem; font-weight: 800; color: #f8fafc; text-transform: uppercase; margin-bottom: 0.5rem;">
+                    Topic-Wise Diagnostics
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div>
+                        <div style="font-size: 0.7rem; font-weight: 700; color: #34d399; margin-bottom: 0.25rem;">STRONG AREAS (&gt;= 75%)</div>
+                        <div class="topic-tag-list">${strongHtml}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.7rem; font-weight: 700; color: #f59e0b; margin-bottom: 0.25rem;">NEEDS IMPROVEMENT (&lt; 75%)</div>
+                        <div class="topic-tag-list">${weakHtml}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quiz-export-actions">
+                <button class="btn-pdf-export btn-pdf-paper" onclick="downloadQuestionPaperPdf('${report.quiz_id}')">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Download Question Paper PDF</span>
+                </button>
+                <button class="btn-pdf-export btn-pdf-report" onclick="downloadEvaluationReportPdf('${report.quiz_id}', '${report.id}')">
+                    <i class="fa-solid fa-file-pdf"></i>
+                    <span>Download Full Evaluation Report PDF</span>
+                </button>
+                <button class="filter-pill" onclick="retakeCurrentQuiz()">
+                    <i class="fa-solid fa-rotate-left"></i> Retake Quiz
+                </button>
+                <button class="filter-pill" onclick="resetQuizToConfig()">
+                    <i class="fa-solid fa-sliders"></i> New Quiz
+                </button>
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="font-size: 0.8rem; font-weight: 800; color: #f8fafc; text-transform: uppercase;">
+                Question-by-Question Detailed Review &amp; Grounding
+            </div>
+            ${questionsHtml}
+        </div>
+    `;
+}
+
+function retrySingleQuestion(idx) {
+    document.getElementById("quizEvaluationWrap").style.display = "none";
+    document.getElementById("quizTakingWrap").style.display = "block";
+    renderQuizQuestion(idx);
+}
+
+function retakeCurrentQuiz() {
+    userQuizAnswers = {};
+    document.getElementById("quizEvaluationWrap").style.display = "none";
+    document.getElementById("quizTakingWrap").style.display = "block";
+    renderQuizQuestion(0);
+}
+
+function downloadQuestionPaperPdf(quizId) {
+    if (!quizId) return;
+    const url = `/api/v1/quizzes/${quizId}/pdf/questions`;
+    window.open(url, "_blank");
+}
+
+function downloadEvaluationReportPdf(quizId, attemptId) {
+    if (!quizId || !attemptId) return;
+    const url = `/api/v1/quizzes/${quizId}/attempts/${attemptId}/pdf/report`;
+    window.open(url, "_blank");
+}
+
+// =========================================================================
+// Written Self-Test ("Test My Understanding")
+// =========================================================================
+async function submitSelfTest() {
+    if (!currentVideoId) {
+        alert("Please select a video first.");
+        return;
+    }
+
+    if (currentVideoData && currentVideoData.video_type === 'observational') {
+        alert("Self-test is disabled for observational footage.");
+        return;
+    }
+
+    const question = document.getElementById("selfTestQuestionInput")?.value || "";
+    const answer = document.getElementById("selfTestAnswerInput")?.value || "";
+
+    if (!answer.trim()) {
+        alert("Please write your explanation first.");
+        return;
+    }
+
+    const btn = document.getElementById("btnSubmitSelfTest");
+    const spinner = document.getElementById("selfTestSpinner");
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = "inline-flex";
+
+    try {
+        const res = await fetch(`/api/v1/videos/${currentVideoId}/self-test`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_question: question,
+                user_answer: answer
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Evaluation failed.");
+        }
+
+        const data = await res.json();
+        renderSelfTestResult(data);
+    } catch (e) {
+        console.error("Error evaluating self-test:", e);
+        alert(e.message || "Could not evaluate understanding.");
+    } finally {
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.style.display = "none";
+    }
+}
+
+function renderSelfTestResult(res) {
+    const card = document.getElementById("selfTestResultCard");
+    if (!card) return;
+
+    card.style.display = "block";
+
+    const score = res.rubric_score || 0;
+    let scoreColor = '#34d399';
+    let statusText = 'Mastered';
+
+    if (score >= 8) {
+        scoreColor = '#34d399';
+        statusText = 'Mastered (Excellent Understanding)';
+    } else if (score >= 6) {
+        scoreColor = '#38bdf8';
+        statusText = 'Good Understanding';
+    } else if (score >= 4) {
+        scoreColor = '#f59e0b';
+        statusText = 'Partial Understanding';
+    } else {
+        scoreColor = '#f87171';
+        statusText = 'Needs Review';
+    }
+
+    let missingPointsHtml = '';
+    const missing = res.missing_points || [];
+    if (missing.length > 0) {
+        missingPointsHtml = `
+            <div style="margin-top: 0.6rem; background: rgba(239,68,68,0.08); border-left: 3px solid #f87171; padding: 0.5rem 0.65rem; border-radius: var(--radius-xs);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #f87171; margin-bottom: 0.2rem;">KEY POINTS MISSED:</div>
+                <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.74rem; color: #fecaca; line-height: 1.4;">
+                    ${missing.map(p => `<li>${escapeHtml(p)}</li>`).join("")}
+                </ul>
+            </div>
+        `;
+    }
+
+    let relearnBtn = '';
+    if (res.timestamp_start !== null && res.timestamp_start !== undefined) {
+        const timeFormatted = formatSeconds(res.timestamp_start);
+        relearnBtn = `
+            <div class="relearn-callout" style="margin-top: 0.75rem;">
+                <div class="relearn-callout-title">
+                    <i class="fa-solid fa-compass" style="color: #38bdf8;"></i>
+                    <span>Targeted Video Relearn Segment</span>
+                </div>
+                <div style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+                    Jump directly to the video segment where this concept is covered:
+                </div>
+                <button class="btn-watch-relearn" onclick="seekAndPlayVideo(${res.timestamp_start})">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Watch &amp; Learn Again at ${timeFormatted}</span>
+                </button>
+            </div>
+        `;
+    }
+
+    card.innerHTML = `
+        <div class="scorecard-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                    <div style="font-size: 1rem; font-weight: 800; color: #f8fafc;">Understanding Evaluation</div>
+                    <div style="font-size: 0.74rem; color: ${scoreColor}; font-weight: 700;">${statusText}</div>
+                </div>
+                <div class="scorecard-metric" style="min-width: 120px;">
+                    <div class="scorecard-value" style="color: ${scoreColor};">${score} / 10</div>
+                    <div class="scorecard-label">Rubric Score</div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.76rem;">
+                <div style="background: rgba(255,255,255,0.02); padding: 0.5rem 0.75rem; border-radius: var(--radius-xs); line-height: 1.45;">
+                    <strong style="color: #38bdf8;">Diagnostic Feedback:</strong>
+                    <p style="margin: 0.25rem 0 0 0; color: #e2e8f0;">${escapeHtml(res.feedback || 'No feedback provided.')}</p>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.02); padding: 0.5rem 0.75rem; border-radius: var(--radius-xs); line-height: 1.45;">
+                    <strong style="color: #34d399;">Expected Core Concept:</strong>
+                    <p style="margin: 0.25rem 0 0 0; color: #cbd5e1;">${escapeHtml(res.correct_concept || 'N/A')}</p>
+                </div>
+
+                ${missingPointsHtml}
+                ${relearnBtn}
+            </div>
+
+            <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+                <button class="filter-pill" onclick="clearSelfTest()">
+                    <i class="fa-solid fa-pen"></i> Write Another
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function clearSelfTest() {
+    const qIn = document.getElementById("selfTestQuestionInput");
+    const aIn = document.getElementById("selfTestAnswerInput");
+    const card = document.getElementById("selfTestResultCard");
+    if (qIn) qIn.value = "";
+    if (aIn) aIn.value = "";
+    if (card) card.style.display = "none";
+}
+
+function seekAndPlayVideo(seconds) {
+    if (currentVideoId) {
+        jumpToVideoAndTimestamp(currentVideoId, seconds, true);
+    } else {
+        const player = document.getElementById("videoPlayer");
+        if (player) {
+            player.currentTime = Math.max(0, parseFloat(seconds) || 0);
+            player.play().catch(() => {});
+        }
     }
 }

@@ -1380,3 +1380,7 @@ class ChatService:
             "Status:\n"
             "Not Found"
         )
+
+
+chat_service = ChatService()
+

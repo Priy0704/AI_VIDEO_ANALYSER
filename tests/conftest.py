@@ -18,14 +18,23 @@ def event_loop():
     loop.close()
 
 
+from app.db.database import init_db
+
+
+from app.services.chat_service import chat_service
+
+
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_environment():
+def setup_test_environment(event_loop):
     """Ensure data directories exist and run tests offline to preserve API quota."""
     settings.init_storage()
     settings.GEMINI_API_KEY = None
     task_queue.audio_transcriber.api_key = None
     task_queue.vision_describer.api_key = None
     task_queue.fusion_indexer.api_key = None
+    task_queue.video_classifier.api_key = None
+    chat_service.api_key = None
+    event_loop.run_until_complete(init_db())
 
 
 @pytest.fixture

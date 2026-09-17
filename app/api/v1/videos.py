@@ -289,6 +289,10 @@ async def get_video_status(
         current_stage=video.current_stage,
         error_message=video.error_message,
         duration_seconds=video.duration_seconds,
+        video_type=getattr(video, "video_type", "knowledge") or "knowledge",
+        video_type_label=getattr(video, "video_type_label", "Learning / Knowledge Content") or "Learning / Knowledge Content",
+        video_type_confidence=getattr(video, "video_type_confidence", 0.90) or 0.90,
+        video_type_reason=getattr(video, "video_type_reason", None),
         created_at=video.created_at,
         updated_at=video.updated_at
     )
@@ -316,6 +320,10 @@ async def list_videos(
             current_stage=v.current_stage,
             error_message=v.error_message,
             duration_seconds=v.duration_seconds,
+            video_type=getattr(v, "video_type", "knowledge") or "knowledge",
+            video_type_label=getattr(v, "video_type_label", "Learning / Knowledge Content") or "Learning / Knowledge Content",
+            video_type_confidence=getattr(v, "video_type_confidence", 0.90) or 0.90,
+            video_type_reason=getattr(v, "video_type_reason", None),
             created_at=v.created_at,
             updated_at=v.updated_at
         )
@@ -348,6 +356,10 @@ async def get_video_detail(
         status=video.status,
         progress_pct=video.progress_pct,
         summary=video.summary,
+        video_type=getattr(video, "video_type", "knowledge") or "knowledge",
+        video_type_label=getattr(video, "video_type_label", "Learning / Knowledge Content") or "Learning / Knowledge Content",
+        video_type_confidence=getattr(video, "video_type_confidence", 0.90) or 0.90,
+        video_type_reason=getattr(video, "video_type_reason", None),
         raw_transcripts=video.raw_transcripts or [],
         created_at=video.created_at,
         segments_count=len(segments),
