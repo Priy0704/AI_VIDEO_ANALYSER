@@ -119,9 +119,21 @@ function toggleTrackVisibility(trackName) {
 // =========================================================================
 // Helpers: Formatting & Escaping
 // =========================================================================
+function decodeUnicodeEscapes(str) {
+    if (!str) return "";
+    return String(str).replace(/\\u([0-9a-fA-F]{4})/g, (match, grp) => {
+        try {
+            return String.fromCharCode(parseInt(grp, 16));
+        } catch {
+            return match;
+        }
+    });
+}
+
 function escapeHtml(text) {
     if (!text) return "";
-    return String(text)
+    const clean = decodeUnicodeEscapes(text);
+    return String(clean)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
