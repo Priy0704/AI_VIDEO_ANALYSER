@@ -42,10 +42,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const player = document.getElementById("videoPlayer");
     if (player) {
         player.addEventListener("timeupdate", handleVideoTimeUpdate);
+        player.addEventListener("seeked", handleVideoTimeUpdate);
+        player.addEventListener("play", handleVideoTimeUpdate);
         player.addEventListener("loadedmetadata", () => {
             if (currentVideoData) {
                 updateTimelineRuler(currentVideoData.duration_seconds || player.duration || 0);
             }
+            handleVideoTimeUpdate();
         });
     }
 
@@ -729,6 +732,10 @@ function switchTab(tabName) {
     if (paneTranscript) paneTranscript.style.display = (tabName === 'transcript' ? 'flex' : 'none');
     if (paneVisuals) paneVisuals.style.display = (tabName === 'visuals' ? 'flex' : 'none');
     if (paneOverview) paneOverview.style.display = (tabName === 'overview' ? 'flex' : 'none');
+
+    setTimeout(() => {
+        handleVideoTimeUpdate();
+    }, 40);
 }
 
 // =========================================================================
@@ -927,43 +934,84 @@ function handleVideoTimeUpdate() {
 
     // 3. Highlight Active Spoken Utterance in Transcript Tab
     if (currentActiveTab === 'transcript') {
+        const paneTranscript = document.getElementById("paneTranscript");
         const items = document.querySelectorAll(".transcript-card");
-        let activeFound = false;
-        items.forEach(item => {
-            const start = parseFloat(item.getAttribute("data-start"));
-            const end = parseFloat(item.getAttribute("data-end"));
-            if (!activeFound && currentTime >= start && currentTime <= end) {
-                activeFound = true;
-                if (!item.classList.contains("active-speech")) {
-                    items.forEach(i => i.classList.remove("active-speech"));
-                    item.classList.add("active-speech");
-                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (items.length > 0 && paneTranscript) {
+            let activeItem = null;
+            items.forEach(item => {
+                const start = parseFloat(item.getAttribute("data-start")) || 0;
+                const end = parseFloat(item.getAttribute("data-end")) || 0;
+                if (!activeItem && currentTime >= start && currentTime <= (end + 0.35)) {
+                    activeItem = item;
+                }
+            });
+
+            // If at the start before the first utterance, align to first item
+            if (!activeItem && items.length > 0) {
+                const firstStart = parseFloat(items[0].getAttribute("data-start")) || 0;
+                if (currentTime <= firstStart + 0.3) {
+                    activeItem = items[0];
                 }
             }
-        });
-        if (!activeFound) {
-            items.forEach(i => i.classList.remove("active-speech"));
+
+            items.forEach(item => {
+                if (item === activeItem) {
+                    if (!item.classList.contains("active-speech")) {
+                        item.classList.add("active-speech");
+                        const parentRect = paneTranscript.getBoundingClientRect();
+                        const itemRect = item.getBoundingClientRect();
+                        if (itemRect.top < parentRect.top || itemRect.bottom > parentRect.bottom) {
+                            paneTranscript.scrollTo({
+                                top: Math.max(0, item.offsetTop - paneTranscript.offsetTop - 20),
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                } else {
+                    item.classList.remove("active-speech");
+                }
+            });
         }
     }
 
     // 4. Highlight Active Scene Card in Visual Scenes Tab
     if (currentActiveTab === 'visuals') {
+        const paneVisuals = document.getElementById("paneVisuals");
         const sceneCards = document.querySelectorAll(".scene-card");
-        let activeSceneFound = false;
-        sceneCards.forEach(card => {
-            const start = parseFloat(card.getAttribute("data-start"));
-            const end = parseFloat(card.getAttribute("data-end"));
-            if (!activeSceneFound && currentTime >= start && currentTime <= end) {
-                activeSceneFound = true;
-                if (!card.classList.contains("active-scene")) {
-                    sceneCards.forEach(c => c.classList.remove("active-scene"));
-                    card.classList.add("active-scene");
-                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (sceneCards.length > 0 && paneVisuals) {
+            let activeScene = null;
+            sceneCards.forEach(card => {
+                const start = parseFloat(card.getAttribute("data-start")) || 0;
+                const end = parseFloat(card.getAttribute("data-end")) || 0;
+                if (!activeScene && currentTime >= start && currentTime <= (end + 0.35)) {
+                    activeScene = card;
+                }
+            });
+
+            if (!activeScene && sceneCards.length > 0) {
+                const firstStart = parseFloat(sceneCards[0].getAttribute("data-start")) || 0;
+                if (currentTime <= firstStart + 0.3) {
+                    activeScene = sceneCards[0];
                 }
             }
-        });
-        if (!activeSceneFound) {
-            sceneCards.forEach(c => c.classList.remove("active-scene"));
+
+            sceneCards.forEach(card => {
+                if (card === activeScene) {
+                    if (!card.classList.contains("active-scene")) {
+                        card.classList.add("active-scene");
+                        const parentRect = paneVisuals.getBoundingClientRect();
+                        const cardRect = card.getBoundingClientRect();
+                        if (cardRect.top < parentRect.top || cardRect.bottom > parentRect.bottom) {
+                            paneVisuals.scrollTo({
+                                top: Math.max(0, card.offsetTop - paneVisuals.offsetTop - 20),
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                } else {
+                    card.classList.remove("active-scene");
+                }
+            });
         }
     }
 }

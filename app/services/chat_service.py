@@ -630,7 +630,7 @@ class ChatService:
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             genai.configure(api_key=self.api_key, transport="rest")
             candidate_models = []
-            for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash"]:
+            for m in [settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"]:
                 if m and m not in candidate_models:
                     candidate_models.append(m)
 
@@ -683,6 +683,12 @@ class ChatService:
                     "5. Names and Visible Text Rule:\n"
                     "   If the question asks for names, faculty members, mentors, attendees, speakers, presenters, song titles, or artists visible in the video or slides:\n"
                     "   List and quote the exact names found in the on-screen text, slide contents, or visual keyframe evidence verbatim. Never omit names or say 'a list of names' if specific names are present in the evidence.\n\n"
+                    "6. Counting and Quantification Rule:\n"
+                    "   If the question asks about counting people, persons, speakers, attendees, characters, objects, or items (e.g., 'total person count in video', 'how many people', 'how many characters'):\n"
+                    "   Directly inspect the provided visual evidence, keyframes, and transcript.\n"
+                    "   - If human persons are visible, state the exact or estimated count of distinct individuals seen in the keyframes/scenes and mention where/when they appear.\n"
+                    "   - If there are NO human persons (e.g., the video only contains animated characters, cartoon vegetables, screen graphics, or an empty scene), explicitly state that there are 0 human persons, describe what appears instead (e.g., animated vegetable characters), and cite the timestamp.\n"
+                    "   - Ground your answer completely in the attached evidence. Do NOT provide an unrelated generic summary.\n\n"
                     f"Video Evidence and Timestamps:\n{context_block}\n\n"
                     f"Overall Video Metadata: {video_summary or 'N/A'}\n"
                     f"{hitl_block}"
@@ -692,7 +698,7 @@ class ChatService:
                     prompt += (
                         "\n\nCRITICAL VISUAL EVIDENCE:\n"
                         "A visual keyframe extracted from the exact timestamp in question has been attached.\n"
-                        "Read any on-screen text, titles, song names, overlays, or visual actions shown in this frame.\n"
+                        "Read any on-screen text, titles, song names, overlays, characters, or visual actions shown in this frame.\n"
                         "Answer the user's question directly, accurately, and factually based on this visual frame."
                     )
 
@@ -705,7 +711,7 @@ class ChatService:
                     model = genai.GenerativeModel(model_name)
                     response = await asyncio.wait_for(
                         asyncio.to_thread(model.generate_content, content_parts),
-                        timeout=10.0
+                        timeout=35.0
                     )
                     if response and response.text:
                         txt = response.text.strip()
@@ -736,11 +742,16 @@ class ChatService:
 
         # Extract actual dialogue from retrieved context if available
         dialogue_matches = []
+        visual_matches = []
         for line in context_lines:
             if "Dialogue:" in line and "No spoken dialogue" not in line and "Ambient" not in line:
                 d_part = line.split("Dialogue:", 1)[1].split("| Visuals:", 1)[0].strip()
                 if d_part:
                     dialogue_matches.append(d_part)
+            if "Visuals" in line:
+                v_part = line.split("Visuals", 1)[1].replace("& Scene:", "").replace(":", "").strip()
+                if v_part:
+                    visual_matches.append(v_part)
 
         # 1. Summarization
         if is_summary:
@@ -752,7 +763,7 @@ class ChatService:
                     d_text = line.split("Dialogue:", 1)[1].split("| Visuals:", 1)[0].split("\n")[0].strip()
                     if d_text and "No spoken" not in d_text and "Ambient" not in d_text:
                         short_d = d_text[:90] + "..." if len(d_text) > 90 else d_text
-                        key_points.append(f"- [{t_str}]: Presentation covers {short_d}")
+                        key_points.append(f"- [{t_str}]: Covers \"{short_d}\"")
                         continue
                 if "Visuals" in line:
                     v_text = line.split("Visuals", 1)[1].replace("& Scene:", "").replace(":", "").split(". ")[0].strip()
@@ -761,14 +772,14 @@ class ChatService:
 
             if not key_points:
                 key_points = [
-                    f"- [{time_tag}]: Overview and demonstration of features."
+                    f"- [{time_tag}]: Overview and sequence of actions."
                 ]
             key_points_block = "\n".join(key_points[:3])
 
             summary_body = (
-                "The video features a presenter introducing Saksham LMS, detailing its role in modernizing academy workflows and replacing legacy Moodle infrastructure. The speaker explains the architecture, addresses operational requirements, and reviews the system dashboard."
-                if dialogue_matches else
-                (video_summary or "The video presents a sequential progression of visual scenes and key actions.")
+                video_summary if (video_summary and "default" not in video_summary.lower()) else
+                (f"The video contains sequential visual scenes and audio elements spanning {time_tag}. " +
+                 (f"Key spoken dialogue includes: \"{dialogue_matches[0][:120]}\"." if dialogue_matches else (visual_matches[0][:150] if visual_matches else "Multimodal visual timeline.")))
             )
 
             return (
@@ -782,110 +793,67 @@ class ChatService:
                 f"{conf_pct}%"
             )
 
-        # 2. Direct questions
-        if any(w in q_lower for w in ["who is speaking", "who is the speaker", "who speaks", "who is the presenter"]):
+        # 2. Counting / People / Quantification
+        if any(w in q_lower for w in ["count", "how many", "number of", "person", "people", "character"]):
+            person_mentions = []
+            for line in context_lines:
+                l_lower = line.lower()
+                if any(k in l_lower for k in ["person", "people", "presenter", "speaker", "man", "woman", "character"]):
+                    person_mentions.append(line.split("\n")[0].strip())
+
+            if person_mentions:
+                first_mention = person_mentions[0]
+                m_t = re.search(r'(\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2})', first_mention)
+                p_tag = m_t.group(1).replace(" - ", "–") if m_t else time_tag
+                return (
+                    f"Answer:\n"
+                    f"Based on the visual evidence, detected subjects in the video include: {first_mention[:160]}.\n\n"
+                    f"Timestamp:\n{p_tag}\n\n"
+                    f"Confidence:\n{conf_pct}%\n\n"
+                    f"Supporting Evidence:\n"
+                    f"Visual scene and keyframe analysis across timestamps."
+                )
+            else:
+                return (
+                    f"Answer:\n"
+                    f"There are 0 human persons detected in the analyzed video segments. "
+                    f"{'Visuals display: ' + visual_matches[0][:120] if visual_matches else 'No human individuals were identified in the keyframes.'}\n\n"
+                    f"Timestamp:\n{time_tag}\n\n"
+                    f"Confidence:\n{conf_pct}%\n\n"
+                    f"Supporting Evidence:\n"
+                    f"Inspection of visual keyframes and descriptions."
+                )
+
+        # 3. Spoken dialogue / What was said
+        if any(w in q_lower for w in ["say", "said", "speaking", "speech", "dialogue", "talk", "what did"]):
+            if dialogue_matches:
+                return (
+                    f"Answer:\n"
+                    f"\"{dialogue_matches[0]}\"\n\n"
+                    f"Timestamp:\n{time_tag}\n\n"
+                    f"Confidence:\n{conf_pct}%\n\n"
+                    f"Supporting Evidence:\n"
+                    f"Spoken audio transcript verbatim dialogue."
+                )
+            else:
+                return (
+                    f"Answer:\n"
+                    f"No spoken dialogue was detected in the relevant video segments around this timestamp.\n\n"
+                    f"Timestamp:\n{time_tag}\n\n"
+                    f"Confidence:\n{conf_pct}%\n\n"
+                    f"Supporting Evidence:\n"
+                    f"Audio transcript analysis."
+                )
+
+        # 4. Visual scenes / Screen / Objects
+        if visual_matches:
             return (
-                "Answer:\n"
-                "The speaker is a male presenter in a dark navy blue polo shirt and dark trousers, wearing an ID badge on a red lanyard while actively presenting to the audience.\n\n"
+                f"Answer:\n"
+                f"{visual_matches[0]}\n\n"
                 f"Timestamp:\n{time_tag}\n\n"
                 f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Visual keyframes show the presenter standing in front of the screen and audio captures him speaking."
-            )
-
-        if any(w in q_lower for w in ["what is the speaker explaining", "what is he explaining", "what is being explained", "what is the presentation about"]):
-            return (
-                "Answer:\n"
-                "The speaker is explaining Saksham LMS, detailing its role as a modern alternative to Moodle and addressing learning management challenges.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Spoken presentation on Saksham LMS and on-screen interface slides."
-            )
-
-        # 3. Visual questions
-        if any(w in q_lower for w in ["wear", "wearing", "clothes", "clothing", "shirt", "polo", "lanyard"]):
-            return (
-                "Answer:\n"
-                "The presenter is wearing a dark navy blue polo shirt, dark trousers, and an identification badge suspended from a red lanyard around his neck.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Visual keyframe inspection of the presenter's attire."
-            )
-
-        if any(w in q_lower for w in ["screen", "tv", "slide", "slides", "display", "monitor"]):
-            return (
-                "Answer:\n"
-                "The wall-mounted flat-screen display on the green wall shows presentation slides with a blue banner featuring a web login interface and system dashboard for the LMS.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Wall-mounted TV display visible on the conference room wall."
-            )
-
-        if any(w in q_lower for w in ["objects are visible", "objects visible", "what objects", "table", "laptop", "remote", "phone"]):
-            return (
-                "Answer:\n"
-                "Visible in the room are a wall-mounted flat-screen TV display, conference table, smartphones, a TV remote control, notebooks, and connection cables.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Conference room furniture and electronic items detected on the table."
-            )
-
-        if any(w in q_lower for w in ["enters", "enter", "entering", "walks in"]):
-            return (
-                "Answer:\n"
-                "The presenter stands at the front of the conference room facing the attendees and gestures toward the display screen while beginning the demonstration.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Visual keyframe progression of the presenter positioned at the front of the room."
-            )
-
-        # 4. Audio + visual questions
-        if any(w in q_lower for w in ["pointing at the screen", "pointing at screen", "while pointing"]):
-            return (
-                "Answer:\n"
-                "While gesturing toward the presentation screen displaying the LMS dashboard, the speaker explains the features of Saksham and discusses replacing legacy systems.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Co-occurring visual hand gesture towards the monitor and audio transcript dialogue."
-            )
-
-        if any(w in q_lower for w in ["shown on screen when", "on screen when this topic", "screen during"]):
-            return (
-                "Answer:\n"
-                "When the topic was discussed, the screen displayed a web portal login interface and dashboard overview for Saksham LMS.\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Visual display slide captured concurrently with the spoken discussion."
-            )
-
-        # 5. Event & Time-based questions
-        if any(w in q_lower for w in ["presentation start", "did the presentation start", "presentation begin"]):
-            return (
-                "Answer:\n"
-                "The presentation began at the start of the video, as the presenter greeted the attendees and introduced the Saksham LMS topic.\n\n"
-                f"Timestamp:\n00:00–00:10\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Initial keyframes and opening spoken greeting."
-            )
-
-        # 6. Specific dialogue / names / speech
-        if any(w in q_lower for w in ["what did the speaker say", "what did he say", "what was said", "said around", "said to", "satya", "santosh", "rupali", "saksham", "sukshm"]):
-            speech_evidence = dialogue_matches[0] if dialogue_matches else "The presenter introduces Saksham LMS and addresses questions from team members."
-            return (
-                "Answer:\n"
-                f"\"{speech_evidence}\"\n\n"
-                f"Timestamp:\n{time_tag}\n\n"
-                f"Confidence:\n{conf_pct}%\n\n"
-                "Supporting Evidence:\n"
-                "Audio speech transcript verbatim dialogue."
+                f"Supporting Evidence:\n"
+                f"Visual keyframe inspection at {time_tag}."
             )
 
         # Default Grounded Fallback
@@ -895,7 +863,7 @@ class ChatService:
             f"{ans_text}\n\n"
             f"Timestamp:\n{time_tag}\n\n"
             f"Confidence:\n{conf_pct}%\n\n"
-            "Supporting Evidence:\n"
+            f"Supporting Evidence:\n"
             "Grounded multimodal video segments and timestamps."
         )
 
