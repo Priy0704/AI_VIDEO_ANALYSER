@@ -1274,22 +1274,76 @@
             border-color: rgba(56, 189, 248, 0.35);
         }
 
-        /* Cross-Video Scope Badge & Header */
-        .global-scope-pill {
+        /* Modern Scope Switcher (All Videos vs This Video) */
+        .copilot-scope-nav {
+            padding: 0.35rem 0.65rem 0.45rem 0.65rem;
+            background: rgba(10, 15, 29, 0.45);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+        }
+
+        .scope-pill-container {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 9999px;
+            padding: 3px;
+            gap: 3px;
+            width: 100%;
+        }
+
+        .scope-pill-btn {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            font-size: 0.74rem;
+            font-weight: 600;
+            padding: 0.36rem 0.65rem;
+            border-radius: 9999px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .scope-pill-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .scope-pill-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+        }
+
+        .scope-pill-btn.active.individual-mode {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+        }
+
+        .scope-counter {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
             font-size: 0.65rem;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #38bdf8;
-            background: rgba(56, 189, 248, 0.12);
-            border: 1px solid rgba(56, 189, 248, 0.35);
-            padding: 0.18rem 0.55rem;
+            padding: 0.05rem 0.4rem;
             border-radius: 9999px;
-            vertical-align: middle;
-            box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .scope-active-dot {
+            width: 6px;
+            height: 6px;
+            background: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgba(52, 211, 153, 0.85);
+            display: inline-block;
         }
 
         .pulse-dot-cyan {
@@ -1303,6 +1357,21 @@
         }
 
         @keyframes pulse-glow-cyan {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.8); }
+        }
+
+        .pulse-dot-emerald {
+            width: 7px;
+            height: 7px;
+            background-color: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.9);
+            animation: pulse-glow-emerald 2s infinite;
+        }
+
+        @keyframes pulse-glow-emerald {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.35; transform: scale(0.8); }
         }
@@ -1832,19 +1901,31 @@
                     <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
                         <i class="fa-solid fa-brain" style="color: var(--primary);"></i>
                         <span>VideoIntel Copilot</span>
-                        <span class="global-scope-pill"><i class="fa-solid fa-earth-americas"></i> All Videos</span>
                     </div>
                     <div class="copilot-subtitle" id="copilotSubtitle" style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span class="pulse-dot-cyan"></span>
-                        <span>Unified cross-video search across <strong id="scopeAllCountBadge" style="color: #38bdf8;">0</strong> videos</span>
+                        <span class="pulse-dot-cyan" id="copilotPulseDot"></span>
+                        <span id="copilotScopeText">Unified search across all <strong id="scopeAllCountBadge" style="color: #38bdf8;">0</strong> videos</span>
                     </div>
                 </div>
                 <div class="chat-header-actions">
-                    <button class="btn-chat-action" id="btnToggleAllAnswers" onclick="toggleAllAnswers()" title="Collapse all answers to save space">
-                        <i class="fa-solid fa-compress"></i> <span>Hide All</span>
-                    </button>
-                    <button class="btn-chat-action" onclick="clearChatMessages()" title="Clear chat messages">
+                    <button class="btn-chat-action" onclick="clearChatMessages()" title="Clear chat history">
                         <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sleek Modern Scope Switcher (All Videos vs This Video) -->
+            <div class="copilot-scope-nav">
+                <div class="scope-pill-container">
+                    <button class="scope-pill-btn active" id="scopeBtnAll" onclick="setChatScope('all')" title="Search and correlate across all library videos">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>All Videos</span>
+                        <span class="scope-counter" id="scopeAllCountPill">0</span>
+                    </button>
+                    <button class="scope-pill-btn" id="scopeBtnCurrent" onclick="setChatScope('current')" title="Focus AI strictly on currently selected video">
+                        <i class="fa-solid fa-film"></i>
+                        <span>This Video</span>
+                        <span class="scope-active-dot" id="currentVideoActiveDot" style="display: none;"></span>
                     </button>
                 </div>
             </div>
@@ -1888,6 +1969,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=5.1"></script>
+    <script src="/static/app.js?v=5.2"></script>
 </body>
 </html>

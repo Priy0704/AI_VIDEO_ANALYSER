@@ -538,6 +538,8 @@ async function loadVideoList() {
         const completedCount = libraryVideosCache.filter(v => v.status === 'completed').length;
         const scopeBadge = document.getElementById("scopeAllCountBadge");
         if (scopeBadge) scopeBadge.innerText = completedCount;
+        const scopePill = document.getElementById("scopeAllCountPill");
+        if (scopePill) scopePill.innerText = completedCount;
     } catch (e) {
         console.error("Error loading videos:", e);
     }
@@ -671,11 +673,22 @@ async function selectVideo(videoId, forceRefresh = false) {
             pollVideoStatus(videoId);
         }
 
-        // Update player header
-        document.getElementById("playerTitle").innerText = currentVideoData.filename;
-        const metaBadge = document.getElementById("playerMetaBadge");
-        metaBadge.style.display = "block";
-        document.getElementById("playerDurationText").innerText = formatSeconds(currentVideoData.duration_seconds || 0);
+        // Update active dot in This Video scope button
+        const activeDot = document.getElementById("currentVideoActiveDot");
+        if (activeDot) activeDot.style.display = "inline-block";
+
+        // If in individual scope, update copilot focus subtitle and placeholder
+        if (chatScope === 'current') {
+            const shortName = currentVideoData.filename.length > 28 
+                ? currentVideoData.filename.substring(0, 26) + '..' 
+                : currentVideoData.filename;
+            const subtitle = document.getElementById("copilotSubtitle");
+            if (subtitle) {
+                subtitle.innerHTML = `<span class="pulse-dot-emerald" id="copilotPulseDot"></span> <span id="copilotScopeText">Focused on: <strong style="color: #34d399;">${escapeHtml(shortName)}</strong></span>`;
+            }
+            const input = document.getElementById("queryInput");
+            if (input) input.placeholder = `Ask anything about ${shortName}...`;
+        }
 
         // Update Tab Badges
         const segments = currentVideoData.segments || [];
@@ -1514,23 +1527,56 @@ function handleKeyPress(e) {
 }
 
 function setChatScope(scope) {
-    chatScope = 'all';
+    chatScope = scope;
+    const btnAll = document.getElementById("scopeBtnAll");
+    const btnCur = document.getElementById("scopeBtnCurrent");
     const input = document.getElementById("queryInput");
     const subtitle = document.getElementById("copilotSubtitle");
     const suggestionsBar = document.getElementById("chatSuggestionsBar");
 
-    if (input) input.placeholder = "Ask anything across all videos (e.g. trace criminal, count people)...";
-    if (subtitle) {
-        const completedCount = libraryVideosCache.filter(v => v.status === 'completed').length;
-        subtitle.innerHTML = `<span class="pulse-dot-cyan"></span> <span>Unified cross-video search across <strong id="scopeAllCountBadge" style="color: #38bdf8;">${completedCount}</strong> videos</span>`;
+    if (btnAll) btnAll.classList.toggle("active", scope === 'all');
+    if (btnCur) {
+        btnCur.classList.toggle("active", scope === 'current');
+        btnCur.classList.toggle("individual-mode", scope === 'current');
     }
-    if (suggestionsBar) {
-        suggestionsBar.innerHTML = `
-            <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
-            <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
-            <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
-            <button class="suggestion-chip" onclick="sendQuickPrompt('Find any suspicious activity')">✦ Suspicious activity</button>
-        `;
+
+    if (scope === 'all') {
+        if (input) input.placeholder = "Ask anything across all videos (e.g. trace persons, count people)...";
+        if (subtitle) {
+            const completedCount = libraryVideosCache.filter(v => v.status === 'completed').length;
+            subtitle.innerHTML = `<span class="pulse-dot-cyan" id="copilotPulseDot"></span> <span id="copilotScopeText">Unified search across all <strong id="scopeAllCountBadge" style="color: #38bdf8;">${completedCount}</strong> videos</span>`;
+        }
+        if (suggestionsBar) {
+            suggestionsBar.innerHTML = `
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Find any suspicious activity')">✦ Suspicious activity</button>
+            `;
+        }
+    } else {
+        if (currentVideoData) {
+            const shortName = currentVideoData.filename.length > 28 
+                ? currentVideoData.filename.substring(0, 26) + '..' 
+                : currentVideoData.filename;
+            if (input) input.placeholder = `Ask anything about ${shortName}...`;
+            if (subtitle) {
+                subtitle.innerHTML = `<span class="pulse-dot-emerald" id="copilotPulseDot"></span> <span id="copilotScopeText">Focused on: <strong style="color: #34d399;">${escapeHtml(shortName)}</strong></span>`;
+            }
+        } else {
+            if (input) input.placeholder = "Select a video from library to ask questions...";
+            if (subtitle) {
+                subtitle.innerHTML = `<span class="pulse-dot-emerald" id="copilotPulseDot"></span> <span id="copilotScopeText" style="color: #f59e0b;">Select a video from library to focus</span>`;
+            }
+        }
+        if (suggestionsBar) {
+            suggestionsBar.innerHTML = `
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize this video')">✦ Summarize this video</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Who is speaking?')">✦ Who is speaking?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is shown on screen?')">✦ What is on screen?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Find key moments in this video')">✦ Key moments</button>
+            `;
+        }
     }
 }
 
@@ -1599,11 +1645,21 @@ async function sendChatMessage() {
     const query = input.value.trim();
     if (!query) return;
 
+    if (chatScope === 'current' && !currentVideoId) {
+        alert("Please select a video from the library to ask about, or switch to 'All Videos' mode.");
+        return;
+    }
+
     input.value = "";
     const chatMessages = document.getElementById("chatMessages");
 
+    const scopeBadgeHtml = (chatScope === 'current' && currentVideoData)
+        ? `<div style="font-size: 0.65rem; color: #34d399; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem;"><i class="fa-solid fa-film"></i> ${escapeHtml(currentVideoData.filename.length > 30 ? currentVideoData.filename.substring(0, 28) + '..' : currentVideoData.filename)}</div>`
+        : `<div style="font-size: 0.65rem; color: #38bdf8; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem;"><i class="fa-solid fa-earth-americas"></i> All Videos</div>`;
+
     chatMessages.innerHTML += `
         <div class="message user">
+            ${scopeBadgeHtml}
             ${escapeHtml(query)}
         </div>
     `;
@@ -1611,21 +1667,23 @@ async function sendChatMessage() {
 
     // Show typing spinner
     const typingId = `typing-${Date.now()}`;
+    const typingText = (chatScope === 'current')
+        ? 'Analyzing multimodal context for this video...'
+        : 'Analyzing multimodal evidence across all videos...';
+
     chatMessages.innerHTML += `
         <div class="message assistant" id="${typingId}">
-            <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--primary);"></i> Analyzing multimodal evidence across all videos...
+            <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--primary);"></i> ${typingText}
         </div>
     `;
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     try {
-        const endpoint = `/api/v1/chat`;
-        const payload = {
-            query: query,
-            session_id: currentSessionId,
-            scope: "all",
-            video_id: currentVideoId || null
-        };
+        const isSingle = (chatScope === 'current' && currentVideoId);
+        const endpoint = isSingle ? `/api/v1/videos/${currentVideoId}/chat` : `/api/v1/chat`;
+        const payload = isSingle
+            ? { query: query, session_id: currentSessionId }
+            : { query: query, session_id: currentSessionId, scope: "all", video_id: currentVideoId || null };
 
         const res = await fetch(endpoint, {
             method: "POST",
