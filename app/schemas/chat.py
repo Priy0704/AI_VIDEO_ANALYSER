@@ -11,6 +11,7 @@ class Citation(BaseModel):
     relevance_score: float = Field(ge=0.0, le=1.0)
     video_id: Optional[str] = None
     video_filename: Optional[str] = None
+    modality: Optional[str] = "Multimodal"  # "Transcript", "Visual", "OCR", "Event", "Multimodal"
 
 
 class ChatRequest(BaseModel):
@@ -27,6 +28,7 @@ class ChatResponse(BaseModel):
     answer: str
     citations: List[Citation] = []
     confidence_score: float = Field(ge=0.0, le=1.0)
+    confidence_level: Optional[str] = "High"  # "High", "Medium", "Low"
     requires_hitl: bool = False
     hitl_review_id: Optional[str] = None
     scope: str = "all"

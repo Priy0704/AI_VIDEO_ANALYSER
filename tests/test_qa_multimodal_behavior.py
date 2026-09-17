@@ -106,8 +106,7 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     )
     assert res_av.status_code == 200
     d_av = res_av.json()
-    assert "Answer:" in d_av["answer"]
-    assert "Supporting Evidence:" in d_av["answer"]
+    assert "Evidence:" in d_av["answer"] or "Supporting Evidence:" in d_av["answer"]
 
     # =========================================================================
     # 4. Event questions
@@ -180,7 +179,8 @@ async def test_multimodal_qa_behavior_and_decision_tree(async_client: AsyncClien
     )
     assert res_absent.status_code == 200
     d_absent = res_absent.json()
-    assert "I don't know. This content is not present in the video." in d_absent["answer"]
+    assert "No supporting evidence found in the uploaded videos." in d_absent["answer"]
+    assert "❌ Not found" in d_absent["answer"]
     assert "Status:\nNot Found" in d_absent["answer"]
     # Strict anti-hallucination requirement: do NOT create a timestamp!
     assert "Timestamp:" not in d_absent["answer"]

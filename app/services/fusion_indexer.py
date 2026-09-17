@@ -73,12 +73,22 @@ class FusionIndexer:
             ]
             visual_text = " ".join(window_visuals).strip()
 
-            # Combine audio and visual perception into a unified contextual string
+            # Gather OCR on-screen text occurring within this window
+            window_ocr = [
+                getattr(v, "ocr_text", "") for v in visuals
+                if start_t <= v.timestamp <= end_t and getattr(v, "ocr_text", "")
+            ]
+            # Deduplicate while preserving order
+            ocr_text = " | ".join(dict.fromkeys(window_ocr)).strip()
+
+            # Combine audio, visual, and OCR perception into a unified contextual string
             parts = []
             if transcript_text:
                 parts.append(f"Audio/Dialogue: {transcript_text}")
             if visual_text:
                 parts.append(f"Visual Scene: {visual_text}")
+            if ocr_text:
+                parts.append(f"On-Screen Text/OCR: {ocr_text}")
 
             combined_text = "\n".join(parts) if parts else f"Timestamp [{start_t:.1f}s - {end_t:.1f}s]: General video progression."
 
@@ -91,6 +101,7 @@ class FusionIndexer:
                 end_time=end_t,
                 transcript_text=transcript_text,
                 visual_description=visual_text,
+                ocr_text=ocr_text,
                 combined_text=combined_text,
                 embedding=embedding_vec
             )

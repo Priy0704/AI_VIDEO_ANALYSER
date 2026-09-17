@@ -65,6 +65,7 @@ class VideoSegment(Base):
     end_time = Column(Float, nullable=False, index=True)
     transcript_text = Column(Text, nullable=True, default="")
     visual_description = Column(Text, nullable=True, default="")
+    ocr_text = Column(Text, nullable=True, default="")
     combined_text = Column(Text, nullable=False)
     
     # 768-dimensional normalized embedding stored as JSON array

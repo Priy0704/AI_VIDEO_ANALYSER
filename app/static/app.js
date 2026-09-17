@@ -1694,14 +1694,58 @@ async function jumpToVideoByFilenameAndTimestamp(filename, seconds, autoplay = t
     }
 }
 
-// Automatically detect any timestamps and cross-video references in AI answer and make them clickable
+// Automatically detect status badges, section labels, timestamps, and video references in AI answer
 function makeTimestampsClickable(htmlText, citations = []) {
-    // 1. Convert markdown bold and italic
-    let formatted = htmlText
+    let formatted = htmlText;
+
+    // 1. Status badges (Found, Uncertain, Not found)
+    formatted = formatted
+        .replace(/(?:^|\n)\s*✅\s*Found\b/gi, '\n<div class="status-badge status-badge-found"><i class="fa-solid fa-circle-check"></i> Found</div>')
+        .replace(/(?:^|\n)\s*⚠️\s*Uncertain\b/gi, '\n<div class="status-badge status-badge-uncertain"><i class="fa-solid fa-triangle-exclamation"></i> Uncertain</div>')
+        .replace(/(?:^|\n)\s*❌\s*Not found\b/gi, '\n<div class="status-badge status-badge-notfound"><i class="fa-solid fa-circle-xmark"></i> Not Found</div>');
+
+    // 2. Modality types in Evidence block (Transcript, Visual, OCR, Event)
+    formatted = formatted.replace(/(?:^|\n)\s*Type:\s*(Transcript|Visual|OCR|Event)\b/gi, (match, mType) => {
+        const lower = mType.toLowerCase();
+        let icon = 'fa-eye';
+        if (lower === 'transcript') icon = 'fa-microphone-lines';
+        else if (lower === 'ocr') icon = 'fa-font';
+        else if (lower === 'event') icon = 'fa-bolt';
+        return `\n<strong class="ai-section-label" style="display:inline-block; margin-right:4px;">Type:</strong> <span class="modality-pill modality-pill-${lower}"><i class="fa-solid ${icon}"></i> ${mType}</span>`;
+    });
+
+    // 3. Confidence level (High, Medium, Low)
+    formatted = formatted.replace(/(?:^|\n)\s*(?:<strong class="ai-section-label">)?Confidence:(?:<\/strong>)?\s*(High|Medium|Low)\b/gi, (match, level) => {
+        const lower = level.toLowerCase();
+        let icon = lower === 'high' ? 'fa-circle-check' : lower === 'medium' ? 'fa-triangle-exclamation' : 'fa-circle-xmark';
+        return `\n<strong class="ai-section-label">Confidence:</strong> <span class="confidence-pill confidence-pill-${lower}"><i class="fa-solid ${icon}"></i> ${level}</span>`;
+    });
+
+    // 4. Convert markdown bold and italic
+    formatted = formatted
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-    // 2. Convert [Video: filename | MM:SS–MM:SS] or [Video: filename | MM:SS]
+    // 5. Convert Section Labels
+    const labels = [
+        "Answer:",
+        "Possible Result:",
+        "Confidence & Limitation:",
+        "Evidence:",
+        "Supporting Evidence:",
+        "Reason:",
+        "Key Points:",
+        "Chronological Video Timeline:",
+        "Status:",
+        "Timestamp:",
+        "Video:"
+    ];
+    labels.forEach(label => {
+        const regex = new RegExp(`(?:^|<br>|\\n)\\s*(${label.replace('&', '&amp;')}|${label})`, 'gi');
+        formatted = formatted.replace(regex, (m, lbl) => `\n<strong class="ai-section-label">${lbl}</strong>`);
+    });
+
+    // 6. Convert [Video: filename | MM:SS–MM:SS] or [Video: filename | MM:SS]
     const videoTimelineRegex = /\[Video:\s*([^|\]]+)\s*\|\s*(\d{1,2}:\d{2})(?:[–-](\d{1,2}:\d{2}))?\]/g;
     formatted = formatted.replace(videoTimelineRegex, (match, vName, tStart, tEnd) => {
         const sec = parseTimeToSeconds(tStart);
@@ -1710,7 +1754,24 @@ function makeTimestampsClickable(htmlText, citations = []) {
         return `<button class="ai-time-jump" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(cleanName)}', ${sec})" title="Play ${escapeHtml(cleanName)} at ${tStart}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> <i class="fa-solid fa-film" style="font-size:0.5rem"></i> ${escapeHtml(shortName)} ${tStart}</button>`;
     });
 
-    // 3. Convert standard timestamps [MM:SS] or MM:SS
+    // 7. Convert numbered video lines like: 1. [cctv_entrance_gate.mp4] or 1. [Video Name]
+    formatted = formatted.replace(/(?:^|\n)\s*(\d+)\.\s*\[([^\]]+)\]/g, (match, num, vName) => {
+        const cleanName = vName.trim();
+        return `\n<div style="margin-top:0.4rem; font-weight:700;"><span style="color:var(--primary);">${num}.</span> <span class="ai-video-tag" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(cleanName)}', 0)" title="Switch to ${escapeHtml(cleanName)}"><i class="fa-solid fa-film"></i> ${escapeHtml(cleanName)}</span></div>`;
+    });
+
+    // 8. Convert Video: <filename> lines to clickable video tags if matching
+    const videoLineRegex = /(<strong class="ai-section-label">Video:<\/strong>\s*)([^\n<]+)/gi;
+    formatted = formatted.replace(videoLineRegex, (match, prefix, vList) => {
+        const vNames = vList.split(',').map(s => s.trim()).filter(Boolean);
+        const tags = vNames.map(name => {
+            const clean = name.replace(/^["'\[]|["'\]]$/g, '');
+            return `<span class="ai-video-tag" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(clean)}', 0)" title="Switch video to ${escapeHtml(clean)}"><i class="fa-solid fa-film"></i> ${escapeHtml(clean)}</span>`;
+        });
+        return `${prefix}${tags.join(' ')}`;
+    });
+
+    // 9. Convert standard timestamps [MM:SS] or MM:SS
     const timestampRegex = /(?:\[)?\b(\d{1,2}:\d{2}(?::\d{2})?)\b(?:\])?/g;
     formatted = formatted.replace(timestampRegex, (match, timeStr) => {
         const sec = parseTimeToSeconds(timeStr);
@@ -1718,7 +1779,7 @@ function makeTimestampsClickable(htmlText, citations = []) {
         let matchedVidName = (chatScope === 'current' && currentVideoData ? currentVideoData.filename : '');
 
         if (citations && citations.length > 0) {
-            const found = citations.find(c => Math.abs(c.start_time - sec) <= 35 || c.timestamp_formatted.includes(timeStr));
+            const found = citations.find(c => Math.abs(c.start_time - sec) <= 35 || (c.timestamp_formatted && c.timestamp_formatted.includes(timeStr)));
             if (found) {
                 matchedVidId = found.video_id;
                 matchedVidName = found.video_filename;
@@ -1736,7 +1797,7 @@ function makeTimestampsClickable(htmlText, citations = []) {
         return `<button class="ai-time-jump" onclick="seekVideo(${sec})" title="Jump video to ${timeStr}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> ${timeStr}</button>`;
     });
 
-    // 4. Convert "at X seconds" or "around X seconds"
+    // 10. Convert "at X seconds" or "around X seconds"
     const secondsRegex = /\b(?:at|around|timestamp)\s+(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/gi;
     formatted = formatted.replace(secondsRegex, (match, secStr) => {
         const sec = parseFloat(secStr);

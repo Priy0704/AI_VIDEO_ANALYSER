@@ -1508,6 +1508,158 @@
             font-weight: 700;
         }
 
+        /* Tripartite status badges (Found, Uncertain, Not found) */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.22rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            margin-bottom: 0.65rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            text-transform: uppercase;
+        }
+
+        .status-badge-found {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+
+        .status-badge-uncertain {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            color: #fbbf24;
+        }
+
+        .status-badge-notfound {
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.4);
+            color: #fb7185;
+        }
+
+        .ai-section-label {
+            display: block;
+            color: var(--primary);
+            font-size: 0.73rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 0.55rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .ai-video-tag {
+            background: rgba(168, 85, 247, 0.15);
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            color: #c084fc;
+            padding: 0.15rem 0.5rem;
+            border-radius: var(--radius-xs);
+            font-size: 0.72rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            margin: 0.15rem 0;
+        }
+
+        .ai-video-tag:hover {
+            background: #a855f7;
+            color: #ffffff;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+        }
+
+        /* Multimodal Evidence Cards & Modality Tags */
+        .evidence-item-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left: 3px solid var(--primary);
+            border-radius: var(--radius-xs);
+            padding: 0.55rem 0.75rem;
+            margin: 0.35rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        }
+
+        .evidence-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .modality-pill {
+            font-size: 0.64rem;
+            font-weight: 700;
+            padding: 0.12rem 0.45rem;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .modality-pill-transcript {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+
+        .modality-pill-ocr {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            color: #fbbf24;
+        }
+
+        .modality-pill-visual {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #38bdf8;
+        }
+
+        .modality-pill-event {
+            background: rgba(168, 85, 247, 0.15);
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            color: #c084fc;
+        }
+
+        .confidence-pill {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .confidence-pill-high {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+
+        .confidence-pill-medium {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .confidence-pill-low {
+            background: rgba(244, 63, 94, 0.15);
+            color: #fb7185;
+            border: 1px solid rgba(244, 63, 94, 0.35);
+        }
+
         /* Suggestion Chips */
         .suggestions-bar {
             flex: 0 0 auto;
@@ -1969,6 +2121,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=5.3"></script>
+    <script src="/static/app.js?v=5.4"></script>
 </body>
 </html>

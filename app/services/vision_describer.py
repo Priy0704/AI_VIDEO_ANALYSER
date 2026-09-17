@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class VisualObservation:
     timestamp: float
     description: str
+    ocr_text: str = ""
 
 
 class VisionDescriber:
@@ -49,7 +50,7 @@ class VisionDescriber:
                 
                 logger.info(f"Analyzing {len(selected_samples)} keyframes across {len(batches)} multimodal batches for full visual + OCR perception.")
 
-                frame_map: Dict[float, str] = {}
+                frame_map: Dict[float, Dict[str, str]] = {}
                 candidate_models = []
                 for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash"]:
                     if m and m not in candidate_models:
@@ -63,28 +64,31 @@ class VisionDescriber:
                         f"You are an expert multimodal video perception and OCR engine. The following {len(images)} images represent "
                         f"chronological frames from the video at timestamps: {time_stamps_str}.\n\n"
                         "MANDATORY EXTRACTION INSTRUCTIONS:\n"
-                        "1. FULL OCR & ON-SCREEN TEXT: Transcribe and extract ALL visible text, presentation slides, headers, bullet points, footers, website URLs, software UI labels, and logos.\n"
+                        "1. FULL OCR & ON-SCREEN TEXT: Transcribe and extract ALL visible text, presentation slides, headers, bullet points, footers, website URLs, software UI labels, subscriber counts, metrics, and logos.\n"
                         "2. EXTRACT ALL NAMES VERBATIM: If there are names of people, faculty, mentors, presenters, speakers, attendees, singers, or participants shown anywhere on screen, LIST EVERY SINGLE NAME VERBATIM. Never summarize as 'a list of names'.\n"
                         "3. DEEP BACKGROUND & VISUAL CONTEXT: Describe background elements, room setting (office, stage, classroom, outdoors, studio), lighting, furniture, items on tables or walls, background people, clothing colors/style, and physical actions/gestures.\n"
-                        "4. SCREEN & DISPLAY DETAILS: If a monitor, television, computer screen, or presentation is visible, describe its exact contents, layout, open tabs, and UI elements.\n"
+                        "4. SCREEN & DISPLAY DETAILS: If a monitor, television, computer screen, or presentation is visible, describe its exact contents, layout, open tabs, subscriber counts, and UI elements.\n"
                         "5. SONG & MEDIA TITLES: If song titles, music credits, or video titles are visible, state them verbatim.\n\n"
                         "Output format for EACH frame:\n"
                         "[FRAME: <timestamp>s]\n"
                         "Headline: <One concise sentence summarizing the main visual scene, slide topic, or action>\n"
                         "Details: <2-3 sentences describing the people, attire, setting, background elements, screen contents, actions, and atmosphere>\n"
-                        "Visible Text & Names: <List all visible text, slide titles, bullet points, and names verbatim. If none, write 'None'>\n\n"
+                        "Visible Text & Names: <List all visible text, slide titles, bullet points, subscriber counts, and names verbatim. If none, write 'None'>\n\n"
                         "Example:\n"
                         "[FRAME: 24.0s]\n"
                         "Headline: Slide displays faculty members and mentors of the program.\n"
                         "Details: Presentation slide showing two columns of faculty and mentor names under Harbinger Group branding. The presenter in navy blue polo stands in front of a conference room wall.\n"
-                        "Visible Text & Names: Slide title: 'Faculty members and mentors of the program-'. Names: Adhiraj Gadgil, Aditya Kulkarni, Amit A Kulkarni, Anu Riswadkar, Anuradha Apte, Ashish Chakraborty, Ashita Vinchurkar, Ashwini Mahabal, Bharti Satpute, Deepashree Kulkarni, Dharmendra M, Neville Postwalla, Nitin Goswami, Prachi Dugal, Prachi Jamadar, Pushpendra Shimpi, Rohan Udas, Ruby Baksi, Rupali Warshetti, Samiksha Dhangade, Sandesh Patne, Shakeel Saraf, Shashank Uttekar, Umesh Kanade, Umesh Sodmise."
+                        "Visible Text & Names: Slide title: 'Faculty members and mentors of the program-'. Names: Adhiraj Gadgil, Aditya Kulkarni, Amit A Kulkarni, Anu Riswadkar, Anuradha Apte."
                     )
 
                     batch_desc = None
                     for model_name in candidate_models:
                         try:
                             model = genai.GenerativeModel(model_name)
-                            response = await asyncio.to_thread(model.generate_content, [prompt] + images)
+                            response = await asyncio.wait_for(
+                                asyncio.to_thread(model.generate_content, [prompt] + images),
+                                timeout=40.0
+                            )
                             if response and response.text:
                                 batch_desc = response.text.strip()
                                 break
@@ -103,11 +107,12 @@ class VisionDescriber:
                     sorted_ts = sorted(frame_map.keys())
                     for s in frame_samples:
                         nearest_ts = min(sorted_ts, key=lambda t: abs(t - s.timestamp))
-                        block_text = frame_map[nearest_ts]
+                        block_info = frame_map[nearest_ts]
                         observations.append(
                             VisualObservation(
                                 timestamp=s.timestamp,
-                                description=block_text
+                                description=block_info["description"],
+                                ocr_text=block_info.get("ocr_text", "")
                             )
                         )
                     return observations
@@ -118,14 +123,15 @@ class VisionDescriber:
         return [
             VisualObservation(
                 timestamp=s.timestamp,
-                description=self._offline_frame_description(s.timestamp)
+                description=self._offline_frame_description(s.timestamp),
+                ocr_text=""
             )
             for s in frame_samples
         ]
 
-    def _parse_frame_blocks(self, text: str, selected_samples: List[FrameSample]) -> Dict[float, str]:
-        """Parse Gemini output into timestamp -> rich description map including on-screen text and names."""
-        result: Dict[float, str] = {}
+    def _parse_frame_blocks(self, text: str, selected_samples: List[FrameSample]) -> Dict[float, Dict[str, str]]:
+        """Parse Gemini output into timestamp -> {description, ocr_text} map including on-screen text and names."""
+        result: Dict[float, Dict[str, str]] = {}
 
         pattern = re.compile(r'\[FRAME:\s*([0-9.]+)s?\]\s*(.*?)(?=\[FRAME:|\Z)', re.DOTALL | re.IGNORECASE)
         matches = list(pattern.finditer(text))
@@ -138,9 +144,10 @@ class VisionDescriber:
 
                     head_m = re.search(r'Headline:\s*(.+?)(?:\n|$)', body, re.IGNORECASE)
                     det_m = re.search(r'Details:\s*(.+?)(?:\n\s*(?:Visible Text|Names)|\Z)', body, re.DOTALL | re.IGNORECASE)
-                    text_m = re.search(r'(?:Visible Text & Names|Visible Text|Names):\s*(.+)', body, re.DOTALL | re.IGNORECASE)
+                    text_m = re.search(r'(?:Visible Text & Names|Visible Text|Names|OCR):\s*(.+)', body, re.DOTALL | re.IGNORECASE)
 
                     parts = []
+                    ocr_val = ""
                     if head_m:
                         parts.append(f"Headline: {head_m.group(1).strip()}")
                     if det_m:
@@ -151,11 +158,13 @@ class VisionDescriber:
                         vis_names = text_m.group(1).strip()
                         if vis_names and vis_names.lower() != "none":
                             parts.append(f"On-Screen Text & Names: {vis_names}")
+                            ocr_val = vis_names
 
-                    if parts:
-                        result[ts] = "\n".join(parts)
-                    else:
-                        result[ts] = body
+                    full_desc = "\n".join(parts) if parts else body
+                    result[ts] = {
+                        "description": full_desc,
+                        "ocr_text": ocr_val
+                    }
                 except Exception:
                     continue
 
@@ -163,10 +172,11 @@ class VisionDescriber:
         if not result:
             paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 30]
             for idx, s in enumerate(selected_samples):
-                if idx < len(paragraphs):
-                    result[s.timestamp] = paragraphs[idx]
-                else:
-                    result[s.timestamp] = paragraphs[-1] if paragraphs else text[:300]
+                desc_text = paragraphs[idx] if idx < len(paragraphs) else (paragraphs[-1] if paragraphs else text[:300])
+                result[s.timestamp] = {
+                    "description": desc_text,
+                    "ocr_text": ""
+                }
 
         return result
 

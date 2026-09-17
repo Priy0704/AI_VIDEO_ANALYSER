@@ -24,10 +24,14 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Initialize database tables."""
+    """Initialize database tables and apply backward-compatible schema updates."""
     async with engine.begin() as conn:
-        # Create all tables defined in Base
         await conn.run_sync(Base.metadata.create_all)
+        # Ensure ocr_text column exists if table was created in earlier schema version
+        try:
+            await conn.execute(text("ALTER TABLE video_segments ADD COLUMN ocr_text TEXT;"))
+        except Exception:
+            pass  # Already exists or dialect handles it
         logger.info("Database tables initialized successfully.")
 
 
