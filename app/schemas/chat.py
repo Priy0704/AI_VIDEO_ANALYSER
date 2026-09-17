@@ -9,22 +9,28 @@ class Citation(BaseModel):
     timestamp_formatted: str  # e.g. "02:15 - 02:30"
     snippet: str
     relevance_score: float = Field(ge=0.0, le=1.0)
+    video_id: Optional[str] = None
+    video_filename: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=2000, description="Question or prompt about the video")
+    query: str = Field(min_length=1, max_length=2000, description="Question or prompt about the video or videos")
     session_id: Optional[str] = Field(None, description="Optional existing session ID for multi-turn chat")
+    scope: Optional[str] = Field("all", description="Query scope: 'all' for cross-video library search, or 'single' for focused video")
+    video_id: Optional[str] = Field(None, description="Optional target video ID when scope is single")
 
 
 class ChatResponse(BaseModel):
     session_id: str
-    video_id: str
+    video_id: Optional[str] = None
     query: str
     answer: str
     citations: List[Citation] = []
     confidence_score: float = Field(ge=0.0, le=1.0)
     requires_hitl: bool = False
     hitl_review_id: Optional[str] = None
+    scope: str = "all"
+    videos_analyzed: List[str] = []
 
 
 class ChatMessageResponse(BaseModel):

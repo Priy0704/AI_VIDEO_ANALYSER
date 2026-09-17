@@ -9,6 +9,7 @@ let pollTimer = null;
 let libraryVideosCache = [];
 let libraryFilter = 'all';
 let isTimelineScrubbing = false;
+let chatScope = 'all';
 
 document.addEventListener("DOMContentLoaded", () => {
     loadVideoList();
@@ -533,12 +534,10 @@ async function loadVideoList() {
             selectVideo(firstCompleted.video_id);
         }
 
-        // Clean button for failed
-        const btnClearFailed = document.getElementById("btnClearFailed");
-        if (btnClearFailed) {
-            const hasFailed = libraryVideosCache.some(v => v.status === "failed");
-            btnClearFailed.style.display = hasFailed ? "inline-flex" : "none";
-        }
+        // Update All Videos scope badge count
+        const completedCount = libraryVideosCache.filter(v => v.status === 'completed').length;
+        const scopeBadge = document.getElementById("scopeAllCountBadge");
+        if (scopeBadge) scopeBadge.innerText = completedCount;
     } catch (e) {
         console.error("Error loading videos:", e);
     }
@@ -677,6 +676,12 @@ async function selectVideo(videoId, forceRefresh = false) {
         const metaBadge = document.getElementById("playerMetaBadge");
         metaBadge.style.display = "block";
         document.getElementById("playerDurationText").innerText = formatSeconds(currentVideoData.duration_seconds || 0);
+
+        const curLabel = document.getElementById("scopeCurrentLabel");
+        if (curLabel) {
+            const shortName = currentVideoData.filename.length > 15 ? currentVideoData.filename.substring(0, 13) + '..' : currentVideoData.filename;
+            curLabel.innerText = `Current (${shortName})`;
+        }
 
         // Update Tab Badges
         const segments = currentVideoData.segments || [];
@@ -1522,21 +1527,95 @@ function handleKeyPress(e) {
     }
 }
 
-// Automatically detect any timestamps (e.g. 00:10, 0:38, 01:24, or "at 15 seconds") in AI answer and make them clickable
+function setChatScope(scope) {
+    chatScope = scope;
+    const btnAll = document.getElementById("scopeBtnAll");
+    const btnCur = document.getElementById("scopeBtnCurrent");
+    const input = document.getElementById("queryInput");
+    const subtitle = document.getElementById("copilotSubtitle");
+    const suggestionsBar = document.getElementById("chatSuggestionsBar");
+
+    if (btnAll) btnAll.classList.toggle("active", scope === 'all');
+    if (btnCur) btnCur.classList.toggle("active", scope === 'current');
+
+    if (scope === 'all') {
+        if (input) input.placeholder = "Ask anything across all videos (e.g. trace criminal, count people)...";
+        if (subtitle) subtitle.innerText = "Multi-video cross search & intelligence";
+        if (suggestionsBar) {
+            suggestionsBar.innerHTML = `
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Who is speaking?')">✦ Who is speaking?</button>
+            `;
+        }
+    } else {
+        if (input) input.placeholder = "Ask anything grounded in this video...";
+        if (subtitle) {
+            subtitle.innerText = currentVideoData ? `Focused on: ${currentVideoData.filename}` : "Focused on selected video";
+        }
+        if (suggestionsBar) {
+            suggestionsBar.innerHTML = `
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize this video')">✦ Summarize video</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Who is speaking?')">✦ Who is speaking?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('What is shown on screen?')">✦ On-screen content?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Find people in the video')">✦ People in video</button>
+            `;
+        }
+    }
+}
+
+function jumpToVideoAndTimestamp(videoId, seconds) {
+    const sec = Math.max(0, parseFloat(seconds) || 0);
+    if (videoId && videoId !== currentVideoId) {
+        selectVideo(videoId).then(() => {
+            setTimeout(() => {
+                seekVideo(sec);
+            }, 350);
+        });
+    } else {
+        seekVideo(sec);
+    }
+}
+
+function jumpToVideoByFilenameAndTimestamp(filename, seconds) {
+    const sec = Math.max(0, parseFloat(seconds) || 0);
+    const clean = (filename || '').trim().toLowerCase();
+    const matched = libraryVideosCache.find(v => {
+        const fn = v.filename.toLowerCase();
+        return fn === clean || fn.includes(clean) || clean.includes(fn);
+    });
+    if (matched) {
+        jumpToVideoAndTimestamp(matched.video_id, sec);
+    } else {
+        seekVideo(sec);
+    }
+}
+
+// Automatically detect any timestamps and cross-video references in AI answer and make them clickable
 function makeTimestampsClickable(htmlText) {
     // 1. Convert markdown bold and italic
     let formatted = htmlText
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-    // 2. Convert standard timestamps [MM:SS] or MM:SS
+    // 2. Convert [Video: filename | MM:SS–MM:SS] or [Video: filename | MM:SS]
+    const videoTimelineRegex = /\[Video:\s*([^|\]]+)\s*\|\s*(\d{1,2}:\d{2})(?:[–-](\d{1,2}:\d{2}))?\]/g;
+    formatted = formatted.replace(videoTimelineRegex, (match, vName, tStart, tEnd) => {
+        const sec = parseTimeToSeconds(tStart);
+        const cleanName = vName.trim();
+        const shortName = cleanName.length > 20 ? cleanName.substring(0, 18) + '..' : cleanName;
+        return `<button class="ai-time-jump" onclick="jumpToVideoByFilenameAndTimestamp('${escapeHtml(cleanName)}', ${sec})" title="Jump to ${escapeHtml(cleanName)} at ${tStart}"><i class="fa-solid fa-film" style="font-size:0.55rem"></i> ${escapeHtml(shortName)} ${tStart}</button>`;
+    });
+
+    // 3. Convert standard timestamps [MM:SS] or MM:SS
     const timestampRegex = /(?:\[)?\b(\d{1,2}:\d{2}(?::\d{2})?)\b(?:\])?/g;
     formatted = formatted.replace(timestampRegex, (match, timeStr) => {
         const sec = parseTimeToSeconds(timeStr);
         return `<button class="ai-time-jump" onclick="seekVideo(${sec})" title="Jump video to ${timeStr}"><i class="fa-solid fa-play" style="font-size:0.5rem"></i> ${timeStr}</button>`;
     });
 
-    // 3. Convert "at X seconds" or "around X seconds"
+    // 4. Convert "at X seconds" or "around X seconds"
     const secondsRegex = /\b(?:at|around|timestamp)\s+(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/gi;
     formatted = formatted.replace(secondsRegex, (match, secStr) => {
         const sec = parseFloat(secStr);
@@ -1551,17 +1630,25 @@ async function sendChatMessage() {
     const query = input.value.trim();
     if (!query) return;
 
-    if (!currentVideoId) {
-        alert("Please select an uploaded video first.");
+    // In current mode, require a video. In 'all' mode, no video selection required!
+    if (chatScope === 'current' && !currentVideoId) {
+        alert("Please select a video from the library to focus on, or switch to 'All Videos' mode.");
         return;
     }
 
     input.value = "";
     const chatMessages = document.getElementById("chatMessages");
 
-    // Append user message
+    // Scope badge on user message
+    const scopeBadgeHtml = (chatScope === 'all' || !currentVideoId)
+        ? `<span style="font-size: 0.65rem; background: rgba(56, 189, 248, 0.25); color: #38bdf8; padding: 0.1rem 0.35rem; border-radius: 3px; margin-right: 0.35rem;"><i class="fa-solid fa-earth-americas"></i> All Videos</span>`
+        : `<span style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.15); color: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 3px; margin-right: 0.35rem;"><i class="fa-solid fa-crosshairs"></i> Current</span>`;
+
     chatMessages.innerHTML += `
-        <div class="message user">${escapeHtml(query)}</div>
+        <div class="message user">
+            <div style="font-size: 0.68rem; opacity: 0.85; margin-bottom: 0.2rem;">${scopeBadgeHtml}</div>
+            ${escapeHtml(query)}
+        </div>
     `;
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
@@ -1569,19 +1656,26 @@ async function sendChatMessage() {
     const typingId = `typing-${Date.now()}`;
     chatMessages.innerHTML += `
         <div class="message assistant" id="${typingId}">
-            <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--primary);"></i> Analyzing multimodal context...
+            <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--primary);"></i> ${(chatScope === 'all' || !currentVideoId) ? 'Analyzing multimodal evidence across all videos...' : 'Analyzing multimodal context...'}
         </div>
     `;
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     try {
-        const res = await fetch(`/api/v1/videos/${currentVideoId}/chat`, {
+        const isGlobal = (chatScope === 'all' || !currentVideoId);
+        const endpoint = isGlobal ? `/api/v1/chat` : `/api/v1/videos/${currentVideoId}/chat`;
+
+        const payload = {
+            query: query,
+            session_id: currentSessionId,
+            scope: isGlobal ? "all" : "single",
+            video_id: currentVideoId
+        };
+
+        const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                query: query,
-                session_id: currentSessionId
-            })
+            body: JSON.stringify(payload)
         });
 
         const typingElem = document.getElementById(typingId);
@@ -1607,18 +1701,25 @@ async function sendChatMessage() {
             citationsHtml = `
                 <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
                     <span style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Evidence:</span>
-                    ${data.citations.map(c => `
-                        <button class="citation-tag" onclick="seekVideo(${c.start_time})" title="${escapeHtml(c.snippet)}">
-                            <i class="fa-solid fa-play" style="font-size: 0.5rem;"></i> ${c.timestamp_formatted}
-                        </button>
-                    `).join("")}
+                    ${data.citations.map(c => {
+                        const vName = c.video_filename ? (c.video_filename.length > 16 ? c.video_filename.substring(0, 14) + '..' : c.video_filename) : '';
+                        const vBadge = vName ? `<span class="citation-tag-video"><i class="fa-solid fa-film"></i> ${escapeHtml(vName)}</span>` : '';
+                        return `
+                            <button class="citation-tag" onclick="jumpToVideoAndTimestamp('${c.video_id || ''}', ${c.start_time})" title="${escapeHtml(c.snippet || '')} (${escapeHtml(c.video_filename || '')})">
+                                ${vBadge}
+                                <i class="fa-solid fa-play" style="font-size: 0.5rem;"></i> ${c.timestamp_formatted}
+                            </button>
+                        `;
+                    }).join("")}
                 </div>
             `;
         }
 
         const formattedAnswer = makeTimestampsClickable(escapeHtml(data.answer));
-
         const msgId = `asst-msg-${Date.now()}`;
+        const videosTag = (data.videos_analyzed && data.videos_analyzed.length > 1) 
+            ? `<span style="font-size: 0.68rem; color: #38bdf8; margin-left: 0.4rem;"><i class="fa-solid fa-layer-group"></i> ${data.videos_analyzed.length} Videos</span>`
+            : '';
 
         chatMessages.innerHTML += `
             <div class="message assistant" id="${msgId}">
@@ -1626,6 +1727,7 @@ async function sendChatMessage() {
                     <div style="display: flex; align-items: center; gap: 0.45rem;">
                         <i class="fa-solid fa-robot" style="color: var(--primary);"></i>
                         <span style="font-weight: 700; color: #f1f5f9;">VideoIntel Copilot</span>
+                        ${videosTag}
                     </div>
                     <button class="btn-chat-action" onclick="toggleMessageCollapse(this)" title="Toggle message visibility">
                         <i class="fa-solid fa-chevron-up"></i>

@@ -13,14 +13,47 @@ from app.schemas.chat import (
 from app.core.exceptions import VideoNotFoundError, VideoNotReadyError
 from app.services.chat_service import ChatService
 
-router = APIRouter(prefix="/videos", tags=["Chat"])
+router = APIRouter(tags=["Chat"])
 chat_service = ChatService()
 
 
 @router.post(
-    "/{video_id}/chat",
+    "/chat",
     response_model=ChatResponse,
-    summary="Ask questions about a processed video"
+    summary="Ask questions across all processed videos (Cross-Video Search & Intelligence)"
+)
+async def chat_global_cross_video(
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Submit a query across all processed videos in the library.
+    Optionally pass video_id to scope to a single video, or leave empty/all for multi-video search.
+    """
+    if payload.scope == "single" and payload.video_id:
+        video = await db.get(Video, payload.video_id)
+        if not video:
+            raise VideoNotFoundError(payload.video_id)
+        if video.status != VideoStatus.COMPLETED:
+            raise VideoNotReadyError(payload.video_id, video.status)
+        return await chat_service.chat(
+            db=db,
+            video=video,
+            query=payload.query,
+            session_id=payload.session_id
+        )
+    else:
+        return await chat_service.chat_cross_video(
+            db=db,
+            query=payload.query,
+            session_id=payload.session_id
+        )
+
+
+@router.post(
+    "/videos/{video_id}/chat",
+    response_model=ChatResponse,
+    summary="Ask questions about a specific processed video"
 )
 async def chat_with_video(
     video_id: str,
@@ -49,7 +82,7 @@ async def chat_with_video(
 
 
 @router.get(
-    "/{video_id}/chat/{session_id}/history",
+    "/videos/{video_id}/chat/{session_id}/history",
     response_model=ChatSessionHistoryResponse,
     summary="Get multi-turn conversation history"
 )
@@ -60,7 +93,7 @@ async def get_chat_history(
 ):
     """Retrieve full message history for a specific chat session."""
     session = await db.get(ChatSession, session_id)
-    if not session or session.video_id != video_id:
+    if not session or (session.video_id and session.video_id != video_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chat session '{session_id}' not found for video '{video_id}'."
@@ -73,6 +106,44 @@ async def get_chat_history(
     return ChatSessionHistoryResponse(
         session_id=session_id,
         video_id=video_id,
+        messages=[
+            ChatMessageResponse(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                citations=m.citations,
+                confidence_score=m.confidence_score,
+                created_at=m.created_at
+            )
+            for m in messages
+        ]
+    )
+
+
+@router.get(
+    "/chat/{session_id}/history",
+    response_model=ChatSessionHistoryResponse,
+    summary="Get multi-turn conversation history for global chat session"
+)
+async def get_global_chat_history(
+    session_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve message history for a global multi-video chat session."""
+    session = await db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chat session '{session_id}' not found."
+        )
+
+    stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at)
+    result = await db.execute(stmt)
+    messages = result.scalars().all()
+
+    return ChatSessionHistoryResponse(
+        session_id=session_id,
+        video_id=session.video_id or "all",
         messages=[
             ChatMessageResponse(
                 id=m.id,

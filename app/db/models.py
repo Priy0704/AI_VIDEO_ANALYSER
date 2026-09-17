@@ -80,7 +80,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    video_id = Column(String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+    video_id = Column(String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -107,7 +107,7 @@ class HITLReview(Base):
     __tablename__ = "hitl_reviews"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    video_id = Column(String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+    video_id = Column(String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=True, index=True)
     query = Column(Text, nullable=False)
     ai_answer = Column(Text, nullable=False)
     confidence_score = Column(Float, nullable=False)

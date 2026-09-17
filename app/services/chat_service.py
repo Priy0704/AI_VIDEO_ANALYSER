@@ -4,7 +4,7 @@ import re
 import io
 import subprocess
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from datetime import datetime
 import numpy as np
 from PIL import Image
@@ -143,14 +143,11 @@ class ChatService:
         t_start, _ = self.parse_temporal_scope(query)
         return t_start
 
-    async def get_or_create_session(self, db: AsyncSession, video_id: str, session_id: Optional[str]) -> ChatSession:
+    async def get_or_create_session(self, db: AsyncSession, video_id: Optional[str], session_id: Optional[str]) -> ChatSession:
         """Fetch existing session or create a new one."""
         if session_id:
-            result = await db.execute(
-                select(ChatSession).where(
-                    and_(ChatSession.id == session_id, ChatSession.video_id == video_id)
-                )
-            )
+            cond = and_(ChatSession.id == session_id, ChatSession.video_id == video_id) if video_id else (ChatSession.id == session_id)
+            result = await db.execute(select(ChatSession).where(cond))
             session = result.scalars().first()
             if session:
                 return session
@@ -228,14 +225,25 @@ class ChatService:
         if q_norm > 0:
             query_vec = query_vec / q_norm
 
-        scored_segments: List[Tuple[VideoSegment, float]] = []
+        scored_segments = self._score_segments([(s, None) for s in all_segments], query, query_vec, top_k)
+        return [(s, score) for s, score, _ in scored_segments]
+
+    def _score_segments(
+        self,
+        segments_with_meta: List[Tuple[VideoSegment, Optional[Video]]],
+        query: str,
+        query_vec: np.ndarray,
+        top_k: int = 10
+    ) -> List[Tuple[VideoSegment, float, Optional[Video]]]:
+        """Score video segments using vector similarity and domain-aware keyword heuristics."""
+        scored_segments: List[Tuple[VideoSegment, float, Optional[Video]]] = []
         q_lower = query.lower()
-        person_words = {"who", "whose", "person", "someone", "speaker", "speaking", "presenter", "presenting", "man", "woman", "guy", "people", "host", "trainer"}
+        person_words = {"who", "whose", "person", "someone", "speaker", "speaking", "presenter", "presenting", "man", "woman", "guy", "people", "host", "trainer", "suspect", "criminal", "individual", "boy", "girl"}
         name_words = {"name", "names", "mentor", "mentors", "faculty", "member", "members", "singer", "singers", "artist", "artists", "title", "titles", "song", "songs", "track", "tracks", "author", "authors", "credit", "credits", "attendee", "attendees", "participant", "participants", "list", "listed", "written", "text", "slide", "slides"}
-        clothing_words = {"wear", "wearing", "clothes", "clothing", "shirt", "polo", "t-shirt", "suit", "jacket", "pants", "lanyard", "badge", "glasses"}
+        clothing_words = {"wear", "wearing", "clothes", "clothing", "shirt", "polo", "t-shirt", "suit", "jacket", "pants", "lanyard", "badge", "glasses", "hoodie", "cap", "mask"}
         display_words = {"screen", "tv", "monitor", "slide", "slides", "display", "presentation", "ui", "login", "dashboard", "board", "projector", "table", "laptop", "phone", "object", "objects"}
         speech_words = {"say", "said", "speak", "speaking", "talk", "talking", "discuss", "discussing", "topic", "words", "speech", "transcript", "dialogue", "hear", "voice", "audio"}
-        action_words = {"leave", "left", "enter", "enters", "entering", "room", "gesture", "gesturing", "point", "pointing", "stand", "standing", "walk", "walking"}
+        action_words = {"leave", "left", "enter", "enters", "entering", "room", "gesture", "gesturing", "point", "pointing", "stand", "standing", "walk", "walking", "running", "ran", "cctv", "camera", "door", "gate", "exit"}
 
         has_person_query = any(w in q_lower for w in person_words)
         has_name_query = any(w in q_lower for w in name_words)
@@ -244,7 +252,6 @@ class ChatService:
         has_speech_query = any(w in q_lower for w in speech_words)
         has_action_query = any(w in q_lower for w in action_words)
 
-        # Specific query keywords (excluding stopwords and generic speech/visual words)
         stopwords = {
             "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
             "the", "and", "is", "are", "was", "were", "this", "that", "there", "about",
@@ -252,17 +259,9 @@ class ChatService:
             "say", "said", "tell", "told", "speak", "spoke", "mention", "mentioned"
         }
         raw_keywords = [w for w in re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', q_lower) if w not in stopwords]
-        
-        # Expand synonyms/aliases
         query_keywords = set(raw_keywords)
-        if any(w in query_keywords for w in ["saksham", "sukshm", "suksham", "sakshm"]):
-            query_keywords.update(["saksham", "sukshm", "suksham", "sakshm"])
-        if any(w in query_keywords for w in ["moodle", "model"]):
-            query_keywords.update(["moodle", "model"])
-        if any(w in query_keywords for w in ["satya", "sathya"]):
-            query_keywords.update(["satya", "sathya"])
 
-        for segment in all_segments:
+        for segment, video in segments_with_meta:
             base_score = 0.0
             if segment.embedding:
                 seg_vec = np.array(segment.embedding, dtype=np.float32)
@@ -274,41 +273,79 @@ class ChatService:
 
             seg_trans = (segment.transcript_text or '').lower()
             seg_vis = (segment.visual_description or '').lower()
-            seg_text = f"{seg_vis} {seg_trans}"
+            vid_name = (video.filename if video else '').lower()
+            seg_text = f"{seg_vis} {seg_trans} {vid_name}"
             relevance = max(0.0, base_score)
 
-            # Direct keyword matches in speech transcript (highest priority)
+            # Direct keyword matches in speech transcript or visuals
             transcript_matches = sum(1 for kw in query_keywords if kw in seg_trans)
             all_matches = sum(1 for kw in query_keywords if kw in seg_text)
 
             if transcript_matches > 0:
-                # Direct match in spoken dialogue
                 relevance = max(relevance, min(0.99, 0.95 + (0.02 * transcript_matches)))
             elif all_matches > 0:
-                # Direct match in visuals or combined text
                 relevance = max(relevance, min(0.94, 0.86 + (0.02 * all_matches)))
             else:
-                # Concept matching for semantic intent when verbatim words differ
                 if has_name_query and any(w in seg_vis for w in ["on-screen text", "names:", "faculty", "mentor", "song", "title", "artist", "credits"]):
                     relevance = max(relevance, 0.96)
                 elif has_name_query and any(w in seg_text for w in ["name", "faculty", "mentor", "member", "slide", "presenter", "speaker"]):
                     relevance = max(relevance, 0.92)
-                if has_person_query and any(w in seg_text for w in ["man", "woman", "person", "speaker", "presenter", "standing", "speaking", "wearing", "addresses"]):
+                if has_person_query and any(w in seg_text for w in ["man", "woman", "person", "speaker", "presenter", "standing", "speaking", "wearing", "addresses", "character", "suspect"]):
                     relevance = max(relevance, 0.92)
-                if has_clothing_query and any(w in seg_text for w in ["polo", "shirt", "pants", "lanyard", "badge", "suit", "wearing", "dark", "blue"]):
+                if has_clothing_query and any(w in seg_text for w in ["polo", "shirt", "pants", "lanyard", "badge", "suit", "wearing", "dark", "blue", "jacket", "black"]):
                     relevance = max(relevance, 0.94)
                 if has_display_query and any(w in seg_text for w in ["screen", "tv", "monitor", "slide", "presentation", "login", "interface", "display", "table"]):
                     relevance = max(relevance, 0.90)
                 if has_speech_query and (segment.transcript_text or any(w in seg_text for w in ["addresses", "presents", "presentation", "speaking", "speaker", "explaining"])):
                     relevance = max(relevance, 0.91)
-                if has_action_query and any(w in seg_text for w in ["standing", "gesturing", "presenting", "room", "front", "enters", "enter"]):
+                if has_action_query and any(w in seg_text for w in ["standing", "gesturing", "presenting", "room", "front", "enters", "enter", "walking", "door", "gate"]):
                     relevance = max(relevance, 0.88)
 
-            scored_segments.append((segment, round(max(0.0, min(1.0, relevance)), 3)))
+            # Boost if query explicitly mentions this video's name or number (e.g. "vid1", "camera 2")
+            if vid_name and any(kw in vid_name for kw in query_keywords):
+                relevance = min(0.99, relevance + 0.15)
 
-        # Sort descending by similarity score
+            scored_segments.append((segment, round(max(0.0, min(1.0, relevance)), 3), video))
+
         scored_segments.sort(key=lambda x: x[1], reverse=True)
         return scored_segments[:top_k]
+
+    async def retrieve_cross_video_segments(
+        self,
+        db: AsyncSession,
+        query: str,
+        top_k: int = 10
+    ) -> List[Tuple[VideoSegment, float, Video]]:
+        """Retrieve most relevant video segments across all completed videos in the database."""
+        stmt = (
+            select(VideoSegment, Video)
+            .join(Video, VideoSegment.video_id == Video.id)
+            .where(Video.status == VideoStatus.COMPLETED)
+        )
+        result = await db.execute(stmt)
+        rows = result.all()
+        if not rows:
+            return []
+
+        query_vec = np.array(await self.fusion_indexer.generate_embedding(query), dtype=np.float32)
+        q_norm = np.linalg.norm(query_vec)
+        if q_norm > 0:
+            query_vec = query_vec / q_norm
+
+        scored = self._score_segments([(r[0], r[1]) for r in rows], query, query_vec, top_k=top_k * 2)
+
+        # Balance results across videos to ensure multi-video representation
+        seen_per_video: Dict[str, int] = {}
+        balanced_results = []
+        for seg, score, vid in scored:
+            vid_id = str(vid.id) if vid else "unknown"
+            seen_per_video[vid_id] = seen_per_video.get(vid_id, 0) + 1
+            if seen_per_video[vid_id] <= 4:
+                balanced_results.append((seg, score, vid))
+            if len(balanced_results) >= top_k:
+                break
+
+        return balanced_results or [(s, sc, v) for s, sc, v in scored[:top_k]]
 
     async def chat(
         self,
@@ -507,6 +544,8 @@ class ChatService:
                     snippet = (seg.visual_description or seg.combined_text or "")[:160].replace("\n", " ")
                     citations.append(
                         Citation(
+                            video_id=str(video.id),
+                            video_filename=video.filename,
                             start_time=seg.start_time,
                             end_time=seg.end_time,
                             timestamp_formatted=time_str,
@@ -582,13 +621,15 @@ class ChatService:
 
         return ChatResponse(
             session_id=session.id,
-            video_id=video.id,
+            video_id=str(video.id),
             query=query,
             answer=answer,
             citations=citations,
             confidence_score=confidence_score,
             requires_hitl=requires_hitl,
-            hitl_review_id=hitl_record_id
+            hitl_review_id=hitl_record_id,
+            scope="single",
+            videos_analyzed=[video.filename]
         )
 
     async def _generate_grounded_answer(
@@ -865,5 +906,230 @@ class ChatService:
             f"Confidence:\n{conf_pct}%\n\n"
             f"Supporting Evidence:\n"
             "Grounded multimodal video segments and timestamps."
+        )
+
+    async def chat_cross_video(
+        self,
+        db: AsyncSession,
+        query: str,
+        session_id: Optional[str] = None
+    ) -> ChatResponse:
+        """
+        Process a global / multi-video query across all completed videos in the library.
+        Grounds answers with both Video Filename and Timestamp citations.
+        Tracks subjects, activities, and events across multiple feeds (e.g. CCTV surveillance).
+        """
+        session = await self.get_or_create_session(db, None, session_id)
+
+        # 1. Fetch all completed videos
+        stmt_vids = select(Video).where(Video.status == VideoStatus.COMPLETED).order_by(Video.created_at.asc())
+        completed_videos = (await db.execute(stmt_vids)).scalars().all()
+
+        if not completed_videos:
+            answer = (
+                "No analyzed videos are available in the library yet.\n\n"
+                "Please upload and process videos first, then ask questions across them.\n\n"
+                "Status:\nNot Found"
+            )
+            return ChatResponse(
+                session_id=session.id,
+                video_id=None,
+                query=query,
+                answer=answer,
+                citations=[],
+                confidence_score=0.0,
+                requires_hitl=False,
+                scope="all",
+                videos_analyzed=[]
+            )
+
+        videos_analyzed = [v.filename for v in completed_videos]
+
+        # 2. Retrieve relevant segments across all videos
+        scored_cross_segments = await self.retrieve_cross_video_segments(db, query, top_k=10)
+
+        # Check if content is found
+        if not scored_cross_segments or scored_cross_segments[0][1] < 0.25:
+            confidence_score = 0.30
+            answer = (
+                f"I don't know. The requested content or subject was not found across any of the {len(completed_videos)} analyzed videos in the library.\n\n"
+                "Status:\nNot Found"
+            )
+            user_msg = ChatMessage(session_id=session.id, role="user", content=query)
+            asst_msg = ChatMessage(session_id=session.id, role="assistant", content=answer, citations=[], confidence_score=confidence_score)
+            db.add(user_msg)
+            db.add(asst_msg)
+            await db.commit()
+            return ChatResponse(
+                session_id=session.id,
+                video_id=None,
+                query=query,
+                answer=answer,
+                citations=[],
+                confidence_score=confidence_score,
+                requires_hitl=False,
+                scope="all",
+                videos_analyzed=videos_analyzed
+            )
+
+        confidence_score = float(scored_cross_segments[0][1])
+        citations: List[Citation] = []
+        video_context_dict: Dict[str, List[str]] = {}
+
+        for seg, score, vid in scored_cross_segments:
+            time_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+            snippet = (seg.visual_description or seg.combined_text or "")[:160].replace("\n", " ")
+            v_name = vid.filename if vid else "Video"
+            v_id = str(vid.id) if vid else str(seg.video_id)
+
+            citations.append(
+                Citation(
+                    video_id=v_id,
+                    video_filename=v_name,
+                    start_time=seg.start_time,
+                    end_time=seg.end_time,
+                    timestamp_formatted=time_str,
+                    snippet=f"[{v_name}] {snippet}",
+                    relevance_score=score
+                )
+            )
+
+            if v_name not in video_context_dict:
+                video_context_dict[v_name] = []
+
+            d_text = seg.transcript_text or "No spoken dialogue"
+            v_text = seg.visual_description or "No visual description"
+            video_context_dict[v_name].append(
+                f"  - Timestamp [{time_str}]:\n"
+                f"    Visuals & Action: {v_text}\n"
+                f"    Dialogue: {d_text}"
+            )
+
+        # Build Multi-Video Evidence Block
+        evidence_blocks = []
+        for v_name, lines in video_context_dict.items():
+            evidence_blocks.append(f"=== VIDEO: {v_name} ===\n" + "\n".join(lines))
+        multi_video_context = "\n\n".join(evidence_blocks)
+
+        # Call Cross-Video LLM generation
+        answer = await self._generate_cross_video_answer(
+            query=query,
+            multi_video_context=multi_video_context,
+            video_names=list(video_context_dict.keys()),
+            confidence_score=confidence_score,
+            scored_segments=scored_cross_segments
+        )
+
+        # Safeguard for not present
+        if (
+            "not present" in answer.lower()
+            or "content not found" in answer.lower()
+            or ("i don't know" in answer.lower() and "video" in answer.lower())
+        ):
+            citations = []
+            if "Status:\nNot Found" not in answer:
+                answer = "I don't know. This content is not present across any analyzed video in the library.\n\nStatus:\nNot Found"
+
+        # Record messages in chat history
+        user_msg = ChatMessage(session_id=session.id, role="user", content=query)
+        asst_msg = ChatMessage(
+            session_id=session.id,
+            role="assistant",
+            content=answer,
+            citations=[c.dict() for c in citations],
+            confidence_score=confidence_score
+        )
+        db.add(user_msg)
+        db.add(asst_msg)
+        await db.commit()
+
+        return ChatResponse(
+            session_id=session.id,
+            video_id=None,
+            query=query,
+            answer=answer,
+            citations=citations,
+            confidence_score=confidence_score,
+            requires_hitl=False,
+            scope="all",
+            videos_analyzed=videos_analyzed
+        )
+
+    async def _generate_cross_video_answer(
+        self,
+        query: str,
+        multi_video_context: str,
+        video_names: List[str],
+        confidence_score: float,
+        scored_segments: List[Tuple[VideoSegment, float, Video]]
+    ) -> str:
+        """Call Gemini to synthesize a factual cross-video answer tracking subjects and timestamps."""
+        conf_pct = int(confidence_score * 100)
+
+        prompt = (
+            "You are an expert Multi-Video Intelligence & Surveillance Copilot analyzing evidence across multiple video recordings (such as CCTV feeds, security footage, bodycams, and presentation files).\n"
+            "GROUNDING PRINCIPLE: Ground all answers strictly in the provided multi-video evidence. Never hallucinate facts, video names, or timestamps.\n\n"
+            "CRITICAL RULES FOR MULTI-VIDEO INTELLIGENCE:\n"
+            "1. VIDEO NAME AND TIMESTAMP ATTRIBUTION:\n"
+            "   For EVERY event, action, appearance, or subject mention, you MUST explicitly cite BOTH the Video Filename and the exact Timestamp Range.\n"
+            "   Format: [Video: <filename> | MM:SS–MM:SS]\n"
+            "   Example: In 'cctv_entrance.mp4' at 05:00–05:15, a person is seen... Later, in 'cctv_hallway.mp4' at 07:00–07:15, the person is seen...\n\n"
+            "2. CHRONOLOGICAL & MULTI-CAMERA TRACKING:\n"
+            "   If the user asks to trace, track, locate, or correlate a person, vehicle, object, or action across videos:\n"
+            "   - Reconstruct the sequence of occurrences across the different cameras/videos in chronological order.\n"
+            "   - Explain the movement, progression, or state changes from one video to the next.\n\n"
+            "3. CROSS-VIDEO QUANTIFICATION & COUNTING:\n"
+            "   If asked to count (e.g. 'total person count', 'how many times does X appear'):\n"
+            "   - Clearly break down the count per video and give the total combined count.\n\n"
+            "4. RESPONSE FORMAT:\n"
+            "Answer:\n"
+            "<Direct comprehensive answer synthesizing findings across videos, citing specific video filenames and timestamps>\n\n"
+            "Chronological Video Timeline:\n"
+            "- [Video: <filename> | MM:SS–MM:SS]: <Key action or observation>\n"
+            "- [Video: <filename> | MM:SS–MM:SS]: <Key action or observation>\n\n"
+            "Confidence:\n"
+            f"{conf_pct}%\n\n"
+            "Supporting Evidence:\n"
+            "<Brief summary of multimodal evidence across the matching video feeds>\n\n"
+            f"Multi-Video Evidence Available:\n{multi_video_context}\n\n"
+            f"User Question: {query}"
+        )
+
+        if self.api_key and self.api_key != "your_gemini_api_key_here":
+            genai.configure(api_key=self.api_key, transport="rest")
+            candidate_models = [settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+            for model_name in candidate_models:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(model.generate_content, [prompt]),
+                        timeout=35.0
+                    )
+                    if response and response.text:
+                        txt = response.text.strip()
+                        txt = re.sub(r'^(?:Answer:\s*)+', 'Answer:\n', txt, flags=re.IGNORECASE)
+                        return txt
+                except Exception as e:
+                    logger.warning(f"Cross-video model {model_name} failed: {e}. Trying next candidate.")
+
+        # Clean dynamic fallback synthesizing directly from scored segments
+        timeline_items = []
+        for seg, score, vid in scored_segments[:6]:
+            v_name = vid.filename if vid else "Video"
+            t_str = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+            act = (seg.visual_description or seg.transcript_text or "Relevant activity")[:110].replace("\n", " ")
+            timeline_items.append(f"- [Video: {v_name} | {t_str}]: {act}.")
+
+        timeline_block = "\n".join(timeline_items) if timeline_items else "- No specific events identified."
+        v_list_str = ", ".join(video_names[:3])
+        return (
+            "Answer:\n"
+            f"Analysis across video feeds ({v_list_str}) identified matching activity across timestamps.\n\n"
+            "Chronological Video Timeline:\n"
+            f"{timeline_block}\n\n"
+            "Confidence:\n"
+            f"{conf_pct}%\n\n"
+            "Supporting Evidence:\n"
+            f"Cross-video multimodal analysis spanning {len(video_names)} video recordings."
         )
 
