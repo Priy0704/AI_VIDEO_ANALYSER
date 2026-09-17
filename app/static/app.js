@@ -687,9 +687,6 @@ async function selectVideo(videoId, forceRefresh = false) {
         // Build Multimodal Timeline Tracks
         renderMultimodalTimeline(currentVideoData);
 
-        // Build Key Moments Strip
-        renderKeyMoments(currentVideoData);
-
         // Contextual greeting in AI Copilot
         const chatMessages = document.getElementById("chatMessages");
         chatMessages.innerHTML = `
@@ -891,59 +888,7 @@ function handleTimelineClick(event) {
     seekVideo(targetSeconds);
 }
 
-// =========================================================================
-// Key Moments Strip Generation
-// =========================================================================
-function renderKeyMoments(videoData) {
-    const container = document.getElementById("keyMomentsContainer");
-    if (!container) return;
 
-    const segments = videoData.segments || [];
-    const moments = [];
-
-    // Derive moments from indexed visual scene headlines
-    segments.forEach((seg, idx) => {
-        const obs = parseVisualObservations(seg.visual_description);
-        if (obs.length > 0 && obs[0].headline && !obs[0].headline.toLowerCase().includes("general")) {
-            moments.push({
-                timestamp: seg.start_time,
-                title: obs[0].headline
-            });
-        }
-    });
-
-    // Deduplicate adjacent moments with identical titles
-    const uniqueMoments = [];
-    moments.forEach(m => {
-        const last = uniqueMoments[uniqueMoments.length - 1];
-        if (!last || last.title !== m.title) {
-            uniqueMoments.push(m);
-        }
-    });
-
-    // Fallback if scenes lack descriptive headlines
-    if (uniqueMoments.length === 0 && segments.length > 0) {
-        uniqueMoments.push({ timestamp: segments[0].start_time, title: "Video Opening" });
-        if (segments.length > 2) {
-            const mid = Math.floor(segments.length / 2);
-            uniqueMoments.push({ timestamp: segments[mid].start_time, title: "Main Demonstration" });
-        }
-        uniqueMoments.push({ timestamp: segments[segments.length - 1].start_time, title: "Closing Scene" });
-    }
-
-    const topMoments = uniqueMoments.slice(0, 8);
-
-    container.innerHTML = topMoments.map(m => {
-        const label = m.title.length > 28 ? m.title.substring(0, 26) + "..." : m.title;
-        return `
-            <div class="key-moment-chip" onclick="seekVideo(${m.timestamp})" title="${escapeHtml(m.title)}">
-                <i class="fa-solid fa-play" style="font-size: 0.55rem; color: var(--primary);"></i>
-                <span class="key-moment-time">${formatSeconds(m.timestamp)}</span>
-                <span>${escapeHtml(label)}</span>
-            </div>
-        `;
-    }).join("");
-}
 
 // =========================================================================
 // Video Playback & Synchronized Highlighting
@@ -1339,16 +1284,6 @@ function renderTabContent() {
                     </p>
                 </div>
 
-                <!-- Key Moments Horizontal Strip -->
-                <div class="key-moments-strip" id="keyMomentsStrip">
-                    <div class="key-moments-label">
-                        <i class="fa-solid fa-bolt"></i>
-                        <span>Key Moments:</span>
-                    </div>
-                    <div id="keyMomentsContainer" style="display: flex; gap: 0.35rem; overflow-x: auto;">
-                        <span style="font-size: 0.72rem; color: var(--text-dark);">Loading key moments...</span>
-                    </div>
-                </div>
 
                 <!-- Interactive Multimodal Timeline -->
                 <div class="timeline-container" id="multimodalTimeline">
