@@ -40,17 +40,30 @@ class FusionIndexer:
         num_windows = max(1, math.ceil(duration / window_size_sec))
         segments_to_create: List[VideoSegment] = []
 
+        # Store full high-fidelity raw transcripts on the video record
+        if transcripts:
+            video.raw_transcripts = [
+                {"start": round(t.start, 2), "end": round(t.end, 2), "text": t.text}
+                for t in transcripts
+            ]
+
         logger.info(f"Fusing {len(transcripts)} transcripts and {len(visuals)} visuals into {num_windows} temporal windows.")
 
         for i in range(num_windows):
             start_t = round(i * window_size_sec, 2)
             end_t = round(min(duration, (i + 1) * window_size_sec), 2)
 
-            # Gather transcripts overlapping this time window
-            window_transcripts = [
-                t.text for t in transcripts
-                if not (t.end < start_t or t.start > end_t)
-            ]
+            # Gather transcripts whose midpoint falls within this window to avoid duplicating across adjacent windows
+            if i == num_windows - 1:
+                window_transcripts = [
+                    t.text for t in transcripts
+                    if start_t <= ((t.start + t.end) / 2) <= end_t
+                ]
+            else:
+                window_transcripts = [
+                    t.text for t in transcripts
+                    if start_t <= ((t.start + t.end) / 2) < end_t
+                ]
             transcript_text = " ".join(window_transcripts).strip()
 
             # Gather visuals occurring within this window

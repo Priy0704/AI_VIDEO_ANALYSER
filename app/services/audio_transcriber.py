@@ -59,7 +59,7 @@ class AudioTranscriber:
                 mp3_path = audio_path.with_suffix(".temp_asr.mp3")
                 cmd = [
                     ffmpeg_exe, "-y", "-i", str(audio_path),
-                    "-vn", "-acodec", "libmp3lame", "-b:a", "48k", "-ar", "16000", "-ac", "1",
+                    "-vn", "-acodec", "libmp3lame", "-b:a", "96k", "-ar", "16000", "-ac", "1",
                     str(mp3_path)
                 ]
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -95,7 +95,7 @@ class AudioTranscriber:
     async def _call_gemini_audio(self, prompt: str, audio_part: dict) -> Optional[str]:
         """Call Gemini models with candidate fallback."""
         candidate_models = []
-        for m in ["gemini-3.5-flash-lite", settings.GEMINI_MODEL, "gemini-3.6-flash"]:
+        for m in ["gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest", settings.GEMINI_MODEL]:
             if m and m not in candidate_models:
                 candidate_models.append(m)
 
@@ -110,30 +110,32 @@ class AudioTranscriber:
         return None
 
     async def _transcribe_with_gemini(self, audio_path: Path) -> List[TranscriptSegment]:
-        """Send audio to Gemini model with prompt requesting exact timestamped lyrics/speech, chunking long audio (>7 min)."""
+        """Send audio to Gemini model with prompt requesting exact timestamped lyrics/speech, chunking long audio (>120s)."""
         logger.info(f"Transcribing audio via Gemini API: {audio_path.name}")
         
         prompt = (
-            "You are an expert multilingual audio transcription and lyric extraction engine. "
-            "Transcribe all spoken words, dialogue, vocals, or song lyrics precisely with accurate start and end timestamps. "
-            "Native language support: English, Hindi, Marathi, and code-mixed speech. "
-            "For songs or music tracks, transcribe the lyrics as sung. "
-            "Output your response strictly as a valid JSON array of chronological objects with keys: "
+            "You are an expert multilingual speech-to-text and lyric transcription engine. "
+            "Listen carefully to this entire audio track and transcribe ALL spoken dialogue, words, presentations, questions, and vocals verbatim.\n"
+            "CRITICAL RULES:\n"
+            "1. VERBATIM ACCURACY: Capture every single spoken word and sentence exactly as uttered. Never summarize, skip, or omit speech.\n"
+            "2. NATURAL SENTENCE SEGMENTATION: Break the speech into concise, natural chronological sentence segments (each roughly 2 to 6 seconds).\n"
+            "3. NATIVE & MIXED LANGUAGE SUPPORT: Accurately capture English, Hindi, Hinglish, Marathi, and names/technical terms.\n"
+            "4. OUTPUT FORMAT: Output strictly as a valid JSON array of objects with keys: "
             "'start' (float seconds), 'end' (float seconds), 'text' (transcribed string). "
-            "Example: [{\"start\": 0.0, \"end\": 4.5, \"text\": \"lyrics or dialogue here\"}]. "
-            "Do not include markdown explanation, preamble, or notes outside the JSON array."
+            "Example: [{\"start\": 0.0, \"end\": 3.5, \"text\": \"exact spoken words here\"}]. "
+            "Do not include any text or markdown outside the JSON array."
         )
 
         total_duration = self._probe_audio_duration(audio_path)
         logger.info(f"Total audio duration for ASR: {total_duration:.1f}s")
 
-        # For long audio (> 7 minutes / 420s), chunk into 300s windows so output JSON is never truncated
-        if total_duration > 420.0:
+        # For audio over 2 minutes (120s), chunk into 120s windows so output JSON is never truncated
+        if total_duration > 120.0:
             import imageio_ffmpeg
             import uuid
             ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
             all_segments: List[TranscriptSegment] = []
-            chunk_size = 300.0  # 5-minute chunks
+            chunk_size = 120.0  # 2-minute chunks
             curr_start = 0.0
 
             while curr_start < total_duration:
@@ -145,7 +147,7 @@ class AudioTranscriber:
                         "-ss", str(curr_start),
                         "-t", str(chunk_len),
                         "-i", str(audio_path),
-                        "-vn", "-acodec", "libmp3lame", "-b:a", "48k", "-ar", "16000", "-ac", "1",
+                        "-vn", "-acodec", "libmp3lame", "-b:a", "96k", "-ar", "16000", "-ac", "1",
                         str(chunk_mp3)
                     ]
                     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)

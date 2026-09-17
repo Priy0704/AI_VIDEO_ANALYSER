@@ -69,7 +69,11 @@ async def async_client():
     async with AsyncSessionLocal() as db:
         res = await db.execute(
             select(Video).where(
-                Video.filename.in_(["hitl_test.mp4", "chat_test.mp4", "sample.mp4", "demo.mp4", "test_sample.mp4", "qa_multimodal_test.mp4"])
+                Video.filename.in_([
+                    "hitl_test.mp4", "chat_test.mp4", "sample.mp4", "demo.mp4", "test_sample.mp4",
+                    "qa_multimodal_test.mp4", "video1.mp4", "video2.mp4", "video3.mp4", "video4.mp4",
+                    "stream.mp4", "watch", "unsupported"
+                ]) | Video.filename.like("stream_%.mp4") | Video.filename.like("%dQw4w9WgXcQ%")
             )
         )
         test_vids = res.scalars().all()

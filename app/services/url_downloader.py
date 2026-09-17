@@ -129,23 +129,27 @@ class UrlDownloader:
             return self._download_via_ffmpeg(url)
 
         ydl_opts: Dict[str, Any] = {
-            'format': 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            # Pick fast pre-muxed 720p mp4 first, or stream-copy mux without slow CPU re-encoding
+            'format': 'best[ext=mp4][height<=720]/best[height<=720]/bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best',
             'outtmpl': str(self.download_dir / '%(id)s_%(title).60B.%(ext)s'),
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'socket_timeout': 15,
             'nocheckcertificate': True,  # Bypass corporate SSL MITM / proxy interception certificates
             'windowsfilenames': True,
+            # Parallel multi-fragment downloads (8 concurrent connections for HLS/DASH)
+            'concurrent_fragment_downloads': 8,
+            'buffersize': 1048576,  # 1MB buffer for fast I/O
+            'http_chunk_size': 10485760,  # 10MB chunk size for YouTube/CDN streams
+            'retries': 3,
+            'fragment_retries': 3,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web']
+                    'player_client': ['android', 'web']
                 }
             },
             'merge_output_format': 'mp4',
-            'postprocessors': [{
-                'key': 'FFmpegVideoConvertor',
-                'preferedformat': 'mp4',
-            }],
         }
 
         if self.ffmpeg_path:

@@ -64,6 +64,7 @@ class VideoProcessor:
             "-y",  # Overwrite
             "-i", str(video_path),
             "-vn",  # No video
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.5",  # Normalize speech volume for crystal clear ASR
             "-acodec", "pcm_s16le",
             "-ar", "16000",  # 16kHz sample rate standard for ASR
             "-ac", "1",      # Mono channel

@@ -36,6 +36,12 @@ class VideoSegmentResponse(BaseModel):
     combined_text: str
 
 
+class TranscriptUtterance(BaseModel):
+    start: float
+    end: float
+    text: str
+
+
 class VideoDetailResponse(BaseModel):
     id: str
     filename: str
@@ -43,6 +49,7 @@ class VideoDetailResponse(BaseModel):
     status: VideoStatus
     progress_pct: int
     summary: Optional[str] = None
+    raw_transcripts: Optional[List[TranscriptUtterance]] = []
     created_at: datetime
     segments_count: int = 0
     segments: List[VideoSegmentResponse] = []

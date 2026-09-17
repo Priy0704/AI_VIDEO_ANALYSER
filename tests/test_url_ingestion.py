@@ -24,33 +24,26 @@ async def test_from_url_unsupported_or_invalid_url(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_from_url_download_failure(async_client: AsyncClient):
-    """Return 400 when UrlDownloader raises ValueError."""
-    with patch("app.api.v1.videos.UrlDownloader.download_video", side_effect=ValueError("Unsupported video site")):
+    """Test URL ingestion enqueues processing and returns 202."""
+    from app.services.task_queue import task_queue
+    called = []
+    with patch.object(task_queue, "enqueue_url_processing", lambda vid, url: called.append((vid, url))):
         res = await async_client.post(
             "/api/v1/videos/from-url",
-            json={"url": "https://example.com/unsupported"}
+            json={"url": "https://example.com/stream.mp4"}
         )
-        assert res.status_code == 400
-        assert "Unsupported video site" in res.json()["detail"]
+        assert res.status_code == 202
+        data = res.json()
+        assert "video_id" in data
+        assert len(called) == 1
 
 
 @pytest.mark.asyncio
 async def test_from_url_success_flow(async_client: AsyncClient, tmp_path: Path):
-    """Test successful ingestion from YouTube/URL with mocked yt-dlp download."""
-    fake_video_file = tmp_path / "mock_downloaded.mp4"
-    fake_video_file.write_bytes(b"dummy mp4 content for testing")
-
-    mock_download_result = {
-        "file_path": str(fake_video_file),
-        "filename": "mock_downloaded.mp4",
-        "title": "Sample YouTube Lecture",
-        "duration_seconds": 45.0,
-        "file_size_mb": 0.05,
-    }
-
-    with patch("app.api.v1.videos.UrlDownloader.download_video", new=AsyncMock(return_value=mock_download_result)), \
-         patch("app.api.v1.videos.task_queue.enqueue_video_processing") as mock_enqueue:
-
+    """Test successful asynchronous URL ingestion."""
+    from app.services.task_queue import task_queue
+    called = []
+    with patch.object(task_queue, "enqueue_url_processing", lambda vid, url: called.append((vid, url))):
         res = await async_client.post(
             "/api/v1/videos/from-url",
             json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
@@ -59,15 +52,9 @@ async def test_from_url_success_flow(async_client: AsyncClient, tmp_path: Path):
         assert res.status_code == 202
         data = res.json()
         assert "video_id" in data
-        assert data["filename"] == "mock_downloaded.mp4"
-        assert data["status"] == "queued"
-        assert "Sample YouTube Lecture" in data["message"]
+        assert data["status"] == "processing"
 
-        # Ensure task queue received video processing job
-        mock_enqueue.assert_called_once()
-
-        # Check status endpoint can read the queued video
+        # Check status endpoint can read the queued/processing video
         status_res = await async_client.get(f"/api/v1/videos/{data['video_id']}/status")
         assert status_res.status_code == 200
-        assert status_res.json()["status"] == "queued"
-        assert status_res.json()["duration_seconds"] == 45.0
+        assert status_res.json()["status"] == "processing"

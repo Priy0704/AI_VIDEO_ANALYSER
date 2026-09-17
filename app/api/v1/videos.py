@@ -1,6 +1,8 @@
 import os
+import asyncio
 import mimetypes
 import shutil
+import logging
 from pathlib import Path
 from typing import List
 from fastapi import APIRouter, UploadFile, File, Depends, status, Query, Request, HTTPException
@@ -25,7 +27,38 @@ from app.core.exceptions import (
 from app.services.task_queue import task_queue
 from app.services.url_downloader import UrlDownloader
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/videos", tags=["Videos"])
+
+
+async def _save_uploaded_file_fast(file: UploadFile, saved_path: Path) -> int:
+    """Save an UploadFile to disk using high-throughput I/O with 16MB buffers and native worker threads."""
+    underlying = getattr(file, "file", None)
+    underlying_file = getattr(underlying, "_file", None) or getattr(underlying, "file", None) or underlying
+
+    # Check if SpooledTemporaryFile has already rolled over to a temp file on disk (standard for >1MB)
+    if underlying_file and hasattr(underlying_file, "name") and os.path.exists(str(underlying_file.name)):
+        def _copy_disk():
+            try:
+                underlying_file.seek(0)
+            except Exception:
+                pass
+            with open(saved_path, "wb") as dst:
+                shutil.copyfileobj(underlying_file, dst, length=16 * 1024 * 1024)
+            return os.path.getsize(saved_path)
+
+        return await asyncio.to_thread(_copy_disk)
+
+    # Otherwise stream chunked in 16MB blocks
+    total_bytes = 0
+    with open(saved_path, "wb") as buffer:
+        while chunk := await file.read(16 * 1024 * 1024):
+            total_bytes += len(chunk)
+            if (total_bytes / (1024 * 1024)) > settings.MAX_VIDEO_SIZE_MB:
+                raise FileTooLargeError(total_bytes / (1024 * 1024), settings.MAX_VIDEO_SIZE_MB)
+            buffer.write(chunk)
+    return total_bytes
 
 
 @router.post(
@@ -40,7 +73,7 @@ async def upload_video(
 ):
     """
     Ingests an arbitrary video file (MP4, MOV, MKV, AVI).
-    Saves file to disk, creates database record, and queues processing asynchronously.
+    Saves file to disk using high-speed 16MB buffering, creates database record, and queues processing asynchronously.
     Returns immediately with 202 Accepted and the video_id.
     """
     clean_filename = Path(file.filename or "video.mp4").name
@@ -48,42 +81,23 @@ async def upload_video(
     if file_ext not in settings.ALLOWED_EXTENSIONS:
         raise InvalidFileFormatError(clean_filename, settings.ALLOWED_EXTENSIONS)
 
-    # Temporary write to check size and persist
     temp_video_id = os.urandom(8).hex()
     saved_filename = f"{temp_video_id}_{clean_filename}"
     saved_path = settings.UPLOAD_DIR / saved_filename
 
-    total_bytes = 0
-    too_large = False
     try:
-        # Stream in 8MB chunks for fast I/O throughput with large (up to 50 GB) videos
-        upload_chunk_size = 8 * 1024 * 1024
-        with open(saved_path, "wb") as buffer:
-            while chunk := await file.read(upload_chunk_size):
-                total_bytes += len(chunk)
-                size_mb = total_bytes / (1024 * 1024)
-                if size_mb > settings.MAX_VIDEO_SIZE_MB:
-                    too_large = True
-                    break
-                buffer.write(chunk)
+        total_bytes = await _save_uploaded_file_fast(file, saved_path)
+    except FileTooLargeError:
+        if saved_path.exists():
+            saved_path.unlink(missing_ok=True)
+        raise
     except Exception as err:
-        try:
-            if saved_path.exists():
-                saved_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        if saved_path.exists():
+            saved_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed writing video file to storage: {str(err)}"
         )
-
-    if too_large:
-        try:
-            if saved_path.exists():
-                saved_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        raise FileTooLargeError(total_bytes / (1024 * 1024), settings.MAX_VIDEO_SIZE_MB)
 
     # Create video record in PostgreSQL
     video = Video(
@@ -110,10 +124,88 @@ async def upload_video(
 
 
 @router.post(
+    "/upload-batch",
+    response_model=List[VideoUploadResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload multiple videos simultaneously in one batch"
+)
+async def upload_multiple_videos(
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accepts 1 to 10 video files at once.
+    Saves all files to disk using fast concurrent streaming,
+    registers all records in PostgreSQL, and queues background processing for all of them.
+    Returns within seconds with all video IDs.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided for upload.")
+
+    responses = []
+    saved_pairs = []
+
+    for file in files:
+        clean_filename = Path(file.filename or "video.mp4").name
+        file_ext = Path(clean_filename).suffix.lower()
+        if file_ext not in settings.ALLOWED_EXTENSIONS:
+            continue
+
+        temp_video_id = os.urandom(8).hex()
+        saved_filename = f"{temp_video_id}_{clean_filename}"
+        saved_path = settings.UPLOAD_DIR / saved_filename
+
+        try:
+            total_bytes = await _save_uploaded_file_fast(file, saved_path)
+            video = Video(
+                filename=clean_filename,
+                file_path=str(saved_path.resolve()),
+                file_size_bytes=total_bytes,
+                status=VideoStatus.QUEUED,
+                progress_pct=0,
+                current_stage="Queued"
+            )
+            db.add(video)
+            saved_pairs.append((video, saved_path))
+        except Exception as err:
+            logger.error(f"Failed to save batch file {clean_filename}: {err}")
+            if saved_path.exists():
+                saved_path.unlink(missing_ok=True)
+
+    if not saved_pairs:
+        raise HTTPException(
+            status_code=400,
+            detail="None of the uploaded files have valid extensions (.mp4, .mov, .mkv, .avi)."
+        )
+
+    await db.commit()
+
+    for video, saved_path in saved_pairs:
+        await db.refresh(video)
+        task_queue.enqueue_video_processing(video.id, saved_path)
+        responses.append(
+            VideoUploadResponse(
+                video_id=video.id,
+                filename=video.filename,
+                status=video.status,
+                message="Video accepted and queued for multimodal processing."
+            )
+        )
+
+    return responses
+
+
+@router.post(
     "/from-url",
     response_model=VideoUploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Download and ingest a video from YouTube, Zoom, meeting recordings, camera streams, or web URLs"
+)
+@router.post(
+    "/from-url/",
+    response_model=VideoUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False
 )
 async def ingest_video_from_url(
     payload: VideoUrlRequest,
@@ -121,47 +213,57 @@ async def ingest_video_from_url(
 ):
     """
     Downloads and ingests a video from any URL (YouTube, Zoom/Meeting recordings, Camera RTSP/HTTP streams, or direct files),
-    saves the MP4 stream, creates a database record, and queues multimodal processing.
+    validates the link instantly, creates a database record, and runs downloading and multimodal indexing in the background.
     """
-    downloader = UrlDownloader(download_dir=settings.UPLOAD_DIR)
-    try:
-        download_info = await downloader.download_video(payload.url)
-    except ValueError as e:
+    url_clean = (payload.url or "").strip()
+    url_l = url_clean.lower()
+    if not (url_l.startswith("http://") or url_l.startswith("https://") or url_l.startswith("rtsp://") or url_l.startswith("rtmp://")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail="Invalid URL: URL must begin with http://, https://, or rtsp:// (for camera streams)"
         )
-    except Exception as e:
+
+    teams_domains = [
+        "teams.cloud.microsoft", "teams.microsoft.com", "teams.live.com",
+        "sharepoint.com", "onedrive.live.com", "1drv.ms"
+    ]
+    if any(d in url_l for d in teams_domains):
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch video: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This link is a private corporate Microsoft Teams / SharePoint link that requires Microsoft 365 Single Sign-On (SSO) login.\n\n"
+                "External services cannot log into your private corporate Microsoft account.\n\n"
+                "👉 How to analyze this meeting video:\n"
+                "1. In Teams or SharePoint, click the three dots (...) or top menu on the recording and select 'Download' (saves as .mp4).\n"
+                "2. Click the '📁 Local File' tab on the left and upload your video file for instant analysis!"
+            )
         )
 
-    file_path = Path(download_info["file_path"])
-    total_bytes = int(download_info["file_size_mb"] * 1024 * 1024)
+    # Derive human-friendly filename placeholder from URL
+    path_stem = Path(url_clean.split("?")[0]).name
+    clean_title = path_stem if (path_stem and len(path_stem) > 3) else f"stream_{os.urandom(4).hex()}.mp4"
 
-    # Create video record in PostgreSQL
+    # Create video record in PostgreSQL immediately with PROCESSING state
     video = Video(
-        filename=download_info["filename"],
-        file_path=str(file_path.resolve()),
-        file_size_bytes=total_bytes,
-        duration_seconds=download_info.get("duration_seconds"),
-        status=VideoStatus.QUEUED,
-        progress_pct=0,
-        current_stage="Queued"
+        filename=clean_title,
+        file_path="",
+        file_size_bytes=0,
+        status=VideoStatus.PROCESSING,
+        progress_pct=5,
+        current_stage="Connecting & downloading video stream from link..."
     )
     db.add(video)
     await db.commit()
     await db.refresh(video)
 
-    # Enqueue background multimodal processing
-    task_queue.enqueue_video_processing(video.id, file_path)
+    # Enqueue background pipeline that downloads and runs multimodal analysis
+    task_queue.enqueue_url_processing(video.id, url_clean)
 
     return VideoUploadResponse(
         video_id=video.id,
         filename=video.filename,
         status=video.status,
-        message=f"Video '{download_info['title']}' fetched and queued for multimodal processing."
+        message="Video URL accepted. Downloading stream and running multimodal analysis in background."
     )
 
 
@@ -246,6 +348,7 @@ async def get_video_detail(
         status=video.status,
         progress_pct=video.progress_pct,
         summary=video.summary,
+        raw_transcripts=video.raw_transcripts or [],
         created_at=video.created_at,
         segments_count=len(segments),
         segments=[
@@ -271,6 +374,9 @@ async def delete_video(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a video, cascading to its segments, sessions, reviews, and removing stored files."""
+    # Cancel any active running or queued background task
+    task_queue.cancel_task(video_id)
+
     video = await db.get(Video, video_id)
     if not video:
         raise VideoNotFoundError(video_id)
@@ -295,6 +401,30 @@ async def delete_video(
     await db.commit()
 
     return {"status": "deleted", "video_id": video_id}
+
+
+@router.post(
+    "/clear-failed",
+    summary="Clear all failed or abandoned test video entries"
+)
+async def clear_failed_videos(
+    db: AsyncSession = Depends(get_db)
+):
+    """Clean up all videos marked as failed."""
+    stmt = select(Video).where(Video.status == VideoStatus.FAILED)
+    result = await db.execute(stmt)
+    failed_videos = result.scalars().all()
+    count = len(failed_videos)
+    for v in failed_videos:
+        task_queue.cancel_task(v.id)
+        try:
+            if v.file_path and Path(v.file_path).exists():
+                Path(v.file_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+        await db.delete(v)
+    await db.commit()
+    return {"deleted_count": count}
 
 
 @router.get(

@@ -46,6 +46,7 @@ class Video(Base):
     current_stage = Column(String(100), nullable=True, default="Queued")
     error_message = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
+    raw_transcripts = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
