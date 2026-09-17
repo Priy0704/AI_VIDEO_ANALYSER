@@ -1248,32 +1248,8 @@ function renderTabContent() {
 
     // 3. OVERVIEW TAB
     if (paneOverview) {
-        const dur = currentVideoData.duration_seconds || 0;
-        const rawTranscripts = currentVideoData.raw_transcripts || [];
-        const speechCount = rawTranscripts.length > 0 ? rawTranscripts.length : segments.filter(s => s.transcript_text).length;
-        const ocrCount = segments.filter(s => (s.visual_description || '').toLowerCase().includes('visible text') || (s.visual_description || '').toLowerCase().includes('ocr')).length;
-
         paneOverview.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <div class="overview-stats-grid">
-                    <div class="overview-stat-tile">
-                        <div class="overview-stat-val">${formatSeconds(dur)}</div>
-                        <div class="overview-stat-label">Duration</div>
-                    </div>
-                    <div class="overview-stat-tile">
-                        <div class="overview-stat-val">${segments.length}</div>
-                        <div class="overview-stat-label">Visual Scenes</div>
-                    </div>
-                    <div class="overview-stat-tile">
-                        <div class="overview-stat-val">${speechCount}</div>
-                        <div class="overview-stat-label">Speech Utterances</div>
-                    </div>
-                    <div class="overview-stat-tile">
-                        <div class="overview-stat-val">${ocrCount}</div>
-                        <div class="overview-stat-label">OCR Frames</div>
-                    </div>
-                </div>
-
                 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.85rem;">
                     <div style="font-weight: 700; color: #f8fafc; font-size: 0.85rem; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
                         <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary);"></i>
