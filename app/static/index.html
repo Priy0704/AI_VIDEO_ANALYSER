@@ -1274,59 +1274,37 @@
             border-color: rgba(56, 189, 248, 0.35);
         }
 
-        /* Cross-Video Scope Bar */
-        .chat-scope-bar {
-            display: flex;
+        /* Cross-Video Scope Badge & Header */
+        .global-scope-pill {
+            display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            padding: 0.25rem 0.35rem;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: var(--radius-sm);
-            margin: 0.2rem 0.5rem 0.4rem 0.5rem;
-            flex-shrink: 0;
-        }
-
-        .scope-tab-btn {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.35rem;
-            background: transparent;
-            border: 1px solid transparent;
-            color: var(--text-muted);
-            font-size: 0.72rem;
-            font-weight: 600;
-            padding: 0.3rem 0.4rem;
-            border-radius: var(--radius-xs);
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-
-        .scope-tab-btn:hover {
-            color: var(--text-main);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .scope-tab-btn.active {
-            background: rgba(56, 189, 248, 0.15);
-            border-color: rgba(56, 189, 248, 0.35);
-            color: var(--primary);
-        }
-
-        .scope-count-badge {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-main);
             font-size: 0.65rem;
-            padding: 0.05rem 0.35rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            padding: 0.18rem 0.55rem;
             border-radius: 9999px;
-            font-family: 'JetBrains Mono', monospace;
+            vertical-align: middle;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
         }
 
-        .scope-tab-btn.active .scope-count-badge {
-            background: rgba(56, 189, 248, 0.3);
-            color: #38bdf8;
+        .pulse-dot-cyan {
+            width: 7px;
+            height: 7px;
+            background-color: #38bdf8;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+            animation: pulse-glow-cyan 2s infinite;
+        }
+
+        @keyframes pulse-glow-cyan {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.8); }
         }
 
         .citation-tag-video {
@@ -1851,11 +1829,15 @@
         <div class="panel-card chat-column">
             <div class="panel-header">
                 <div>
-                    <div class="panel-title">
-                        <i class="fa-solid fa-robot"></i>
+                    <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fa-solid fa-brain" style="color: var(--primary);"></i>
                         <span>VideoIntel Copilot</span>
+                        <span class="global-scope-pill"><i class="fa-solid fa-earth-americas"></i> All Videos</span>
                     </div>
-                    <div class="copilot-subtitle" id="copilotSubtitle">Multi-video cross search & intelligence</div>
+                    <div class="copilot-subtitle" id="copilotSubtitle" style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span class="pulse-dot-cyan"></span>
+                        <span>Unified cross-video search across <strong id="scopeAllCountBadge" style="color: #38bdf8;">0</strong> videos</span>
+                    </div>
                 </div>
                 <div class="chat-header-actions">
                     <button class="btn-chat-action" id="btnToggleAllAnswers" onclick="toggleAllAnswers()" title="Collapse all answers to save space">
@@ -1867,23 +1849,13 @@
                 </div>
             </div>
 
-            <!-- Chat Scope Switcher (Cross-Video Library Search vs Single Video) -->
-            <div class="chat-scope-bar" id="chatScopeBar">
-                <button class="scope-tab-btn active" id="scopeBtnAll" onclick="setChatScope('all')" title="Search and analyze across all uploaded videos">
-                    <i class="fa-solid fa-earth-americas"></i>
-                    <span>All Videos</span>
-                    <span class="scope-count-badge" id="scopeAllCountBadge">0</span>
-                </button>
-                <button class="scope-tab-btn" id="scopeBtnCurrent" onclick="setChatScope('current')" title="Focus search strictly on currently selected video">
-                    <i class="fa-solid fa-crosshairs"></i>
-                    <span id="scopeCurrentLabel">Current Video</span>
-                </button>
-            </div>
-
             <!-- Messages Log -->
             <div class="chat-messages" id="chatMessages">
                 <div class="message assistant">
-                    Hello! I am your <strong>Cross-Video AI Intelligence Copilot</strong>. Ask questions across all uploaded videos or focus on one (e.g. <i>"Trace the person in the black jacket across cameras"</i> or <i>"Total person count across all videos"</i>).
+                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+                        <i class="fa-solid fa-shield-halved"></i> Cross-Video Intelligence Active
+                    </div>
+                    Ask any question across all uploaded videos. I search visual scenes, spoken audio transcripts, and on-screen text to trace people, events, and activities with exact video names and timestamps.
                 </div>
             </div>
 
@@ -1892,7 +1864,7 @@
                 <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
                 <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
                 <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Who is speaking?')">✦ Who is speaking?</button>
+                <button class="suggestion-chip" onclick="sendQuickPrompt('Find any suspicious activity')">✦ Suspicious activity</button>
             </div>
 
             <!-- Chat Input Box -->
@@ -1916,6 +1888,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=5.0"></script>
+    <script src="/static/app.js?v=5.1"></script>
 </body>
 </html>
