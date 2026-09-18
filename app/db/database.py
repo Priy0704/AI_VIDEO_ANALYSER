@@ -36,6 +36,25 @@ async def init_db() -> None:
         await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type_confidence FLOAT DEFAULT 0.90;"))
         await conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_type_reason TEXT;"))
 
+        # Re-classify existing database records for CCTV/Surveillance footage & short audio-less clips
+        await conn.execute(text("""
+            UPDATE videos
+            SET video_type = 'observational',
+                video_type_label = 'Observational / Surveillance',
+                video_type_reason = 'Observational camera footage or short video (<60s) without voice learning material.'
+            WHERE (
+                LOWER(filename) LIKE '%cctv%' OR
+                LOWER(filename) LIKE '%surveillance%' OR
+                LOWER(filename) LIKE '%cam%' OR
+                LOWER(filename) LIKE '%gate%' OR
+                LOWER(filename) LIKE '%hallway%' OR
+                LOWER(filename) LIKE '%corridor%' OR
+                LOWER(filename) LIKE '%dashcam%' OR
+                LOWER(filename) LIKE '%traffic%' OR
+                (duration_seconds IS NOT NULL AND duration_seconds > 0 AND duration_seconds < 60.0 AND LOWER(filename) NOT LIKE '%lecture%' AND LOWER(filename) NOT LIKE '%tutorial%' AND LOWER(filename) NOT LIKE '%presentation%')
+            ) AND video_type = 'knowledge';
+        """))
+
     logger.info("Database tables initialized successfully.")
 
 

@@ -95,7 +95,7 @@ class AudioTranscriber:
     async def _call_gemini_audio(self, prompt: str, audio_part: dict) -> Optional[str]:
         """Call Gemini models with candidate fallback."""
         candidate_models = []
-        for m in ["gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest", settings.GEMINI_MODEL]:
+        for m in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
             if m and m not in candidate_models:
                 candidate_models.append(m)
 

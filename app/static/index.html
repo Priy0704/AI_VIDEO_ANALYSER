@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VideoIntel AI - Multimodal Video Intelligence Workspace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -48,7 +51,7 @@
 
         body {
             background-color: var(--bg-base);
-            background-image: 
+            background-image:
                 radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.12), transparent),
                 radial-gradient(ellipse 60% 40% at 100% 100%, rgba(99, 102, 241, 0.08), transparent);
             color: var(--text-main);
@@ -65,14 +68,17 @@
             width: 6px;
             height: 6px;
         }
+
         ::-webkit-scrollbar-track {
             background: transparent;
         }
+
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.12);
             border-radius: 9999px;
             transition: background var(--transition-fast);
         }
+
         ::-webkit-scrollbar-thumb:hover {
             background: var(--primary);
         }
@@ -174,8 +180,17 @@
         }
 
         @keyframes pulse-glow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.85); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.85);
+            }
         }
 
         .btn-header-action {
@@ -216,8 +231,15 @@
         }
 
         @keyframes popoverFadeIn {
-            from { opacity: 0; transform: translateY(-6px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .popover-title {
@@ -298,10 +320,235 @@
                 max-height: none;
                 overflow-y: auto;
             }
+
             body {
                 overflow-y: auto;
                 height: auto;
             }
+        }
+
+        /* Workspace Layout Views (De-cluttering & Focused Multi-Screen Workspace) */
+        .main-container.view-mode-player {
+            grid-template-columns: 280px minmax(0, 1fr) 0px !important;
+            gap: 0.8rem;
+        }
+
+        .main-container.view-mode-player .chat-column {
+            display: none !important;
+        }
+
+        .main-container.view-mode-learning {
+            grid-template-columns: 280px minmax(0, 1fr) 0px !important;
+            gap: 0.8rem;
+        }
+
+        .main-container.view-mode-learning .chat-column {
+            display: none !important;
+        }
+
+        .main-container.view-mode-chat {
+            grid-template-columns: 280px 0px minmax(0, 1fr) !important;
+            gap: 0.8rem;
+        }
+
+        .main-container.view-mode-chat .center-card {
+            display: none !important;
+        }
+
+        .workspace-switcher {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 3px;
+            border-radius: 9999px;
+            border: 1px solid var(--border);
+            gap: 2px;
+        }
+
+        .view-mode-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.28rem 0.65rem;
+            border-radius: 9999px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all var(--transition-fast);
+        }
+
+        .view-mode-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .view-mode-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+            color: #ffffff;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        }
+
+        /* Full Context Modal Popup Screen */
+        .context-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(4, 7, 15, 0.88);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            box-sizing: border-box;
+            animation: fadeIn 0.18s ease-out;
+        }
+
+        .context-modal-card {
+            background: #0c111d;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: var(--radius-lg);
+            width: 92vw;
+            max-width: 1050px;
+            height: 85vh;
+            max-height: 850px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.85), 0 0 40px rgba(56, 189, 248, 0.2);
+            overflow: hidden;
+            position: relative;
+            margin: auto;
+        }
+
+        .context-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.4rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.85);
+        }
+
+        .context-modal-tabs {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.6rem 1.4rem;
+            background: rgba(15, 23, 42, 0.4);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-tab-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.45rem 0.85rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            transition: all var(--transition-fast);
+        }
+
+        .modal-tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .modal-tab-btn.active {
+            background: rgba(56, 189, 248, 0.18);
+            color: var(--primary);
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .context-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .btn-modal-close {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            color: #fca5a5;
+            padding: 0.5rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            transition: all var(--transition-fast);
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-modal-close:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.45);
+            transform: translateY(-1px);
+        }
+
+        .btn-expand-context {
+            margin-left: auto;
+            background: rgba(56, 189, 248, 0.14);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: var(--primary);
+            padding: 0.28rem 0.65rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.74rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-expand-context:hover {
+            background: var(--primary);
+            color: #060911;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+        }
+
+        /* Left Panel Video Library Constraints & Scrolling */
+        .upload-section {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .upload-section.collapsed .upload-dropzone,
+        .upload-section.collapsed .url-input-pane {
+            display: none !important;
+        }
+
+        .video-list {
+            flex: 1 1 200px !important;
+            min-height: 180px !important;
+            max-height: 100%;
+            overflow-y: auto !important;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            padding-right: 2px;
         }
 
         /* Base Panel Card */
@@ -396,7 +643,8 @@
             transition: all var(--transition-smooth);
         }
 
-        .upload-dropzone:hover, .upload-dropzone.dragover {
+        .upload-dropzone:hover,
+        .upload-dropzone.dragover {
             border-color: var(--primary);
             background: rgba(56, 189, 248, 0.08);
             box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
@@ -960,25 +1208,32 @@
         .inspector-tabs {
             flex: 0 0 auto;
             display: flex;
+            align-items: center;
             gap: 0.35rem;
-            padding: 0.45rem 0.65rem;
+            padding: 0.4rem 0.65rem;
             border-bottom: 1px solid var(--border);
             background: rgba(15, 23, 42, 0.6);
+            overflow-x: auto;
+            white-space: nowrap;
         }
 
         .tab-btn {
             background: transparent;
             border: 1px solid transparent;
             color: var(--text-muted);
-            padding: 0.32rem 0.7rem;
+            padding: 0.28rem 0.65rem;
             border-radius: var(--radius-sm);
-            font-size: 0.76rem;
+            font-size: 0.74rem;
             font-weight: 600;
             cursor: pointer;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 0.35rem;
+            white-space: nowrap;
             transition: all var(--transition-fast);
+            flex-shrink: 0;
+            height: 28px;
+            box-sizing: border-box;
         }
 
         .tab-btn:hover {
@@ -1357,8 +1612,17 @@
         }
 
         @keyframes pulse-glow-cyan {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.35; transform: scale(0.8); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.35;
+                transform: scale(0.8);
+            }
         }
 
         .pulse-dot-emerald {
@@ -1372,8 +1636,17 @@
         }
 
         @keyframes pulse-glow-emerald {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.35; transform: scale(0.8); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.35;
+                transform: scale(0.8);
+            }
         }
 
         .citation-tag-video {
@@ -1418,8 +1691,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .message.assistant {
@@ -1816,11 +2096,13 @@
             letter-spacing: 0.02em;
             transition: all var(--transition-fast);
         }
+
         .badge-classification-knowledge {
             background: rgba(99, 102, 241, 0.18);
             color: #818cf8;
             border: 1px solid rgba(99, 102, 241, 0.38);
         }
+
         .badge-classification-observational {
             background: rgba(245, 158, 11, 0.18);
             color: #fbbf24;
@@ -1831,15 +2113,48 @@
         .tab-btn-learning {
             position: relative;
         }
+
         .tab-btn-learning::after {
             content: "";
             position: absolute;
-            top: 4px;
-            right: 4px;
-            width: 6px;
-            height: 6px;
+            top: 3px;
+            right: 3px;
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
             background: #818cf8;
+        }
+
+        .tab-btn-learning.active {
+            color: #818cf8;
+            background: rgba(99, 102, 241, 0.14);
+            border-color: rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-expand-context {
+            margin-left: auto;
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            color: var(--primary);
+            padding: 0.28rem 0.6rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+            transition: all var(--transition-fast);
+            flex-shrink: 0;
+            height: 28px;
+            box-sizing: border-box;
+        }
+
+        .btn-expand-context:hover {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: var(--primary);
+            color: #ffffff;
         }
 
         /* Quiz Container & Cards */
@@ -1893,6 +2208,7 @@
             cursor: pointer;
             transition: border-color var(--transition-fast);
         }
+
         .config-select:focus {
             border-color: var(--primary);
         }
@@ -1913,6 +2229,7 @@
             box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
             transition: all var(--transition-fast);
         }
+
         .btn-generate-quiz:hover {
             transform: translateY(-1px);
             box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
@@ -1936,6 +2253,7 @@
             border-radius: 9999px;
             overflow: hidden;
         }
+
         .quiz-progress-bar-fill {
             height: 100%;
             background: linear-gradient(90deg, #6366f1, #38bdf8);
@@ -1963,10 +2281,12 @@
             gap: 0.75rem;
             transition: all var(--transition-fast);
         }
+
         .quiz-option-btn:hover {
             background: rgba(56, 189, 248, 0.12);
             border-color: rgba(56, 189, 248, 0.35);
         }
+
         .quiz-option-btn.selected {
             background: rgba(99, 102, 241, 0.25);
             border-color: #818cf8;
@@ -1999,6 +2319,7 @@
             grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
             gap: 0.75rem;
         }
+
         .eval-stat-item {
             background: rgba(15, 23, 42, 0.6);
             border: 1px solid var(--border);
@@ -2006,11 +2327,13 @@
             padding: 0.6rem;
             text-align: center;
         }
+
         .eval-stat-val {
             font-size: 1.3rem;
             font-weight: 800;
             color: var(--text-main);
         }
+
         .eval-stat-label {
             font-size: 0.68rem;
             color: var(--text-muted);
@@ -2027,11 +2350,13 @@
             padding: 0.2rem 0.55rem;
             border-radius: var(--radius-xs);
         }
+
         .topic-pill-strong {
             background: rgba(16, 185, 129, 0.15);
             color: #34d399;
             border: 1px solid rgba(16, 185, 129, 0.35);
         }
+
         .topic-pill-weak {
             background: rgba(239, 68, 68, 0.15);
             color: #f87171;
@@ -2050,6 +2375,7 @@
             gap: 0.75rem;
             margin-top: 0.5rem;
         }
+
         .btn-relearn {
             background: linear-gradient(135deg, #0284c7, #06b6d4);
             color: #ffffff;
@@ -2064,6 +2390,7 @@
             gap: 0.35rem;
             transition: all var(--transition-fast);
         }
+
         .btn-relearn:hover {
             transform: scale(1.02);
             box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
@@ -2083,13 +2410,118 @@
             gap: 0.45rem;
             transition: all var(--transition-fast);
         }
+
         .btn-pdf-action:hover {
             background: rgba(56, 189, 248, 0.15);
             border-color: var(--primary);
             color: var(--primary);
         }
+
+        /* Interactive Quiz Option Styling */
+        .quiz-option-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            user-select: none;
+            margin-bottom: 0.4rem;
+        }
+
+        .quiz-option-item:hover {
+            background: rgba(30, 41, 59, 0.85);
+            border-color: rgba(56, 189, 248, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .quiz-option-item.selected {
+            background: rgba(56, 189, 248, 0.14);
+            border-color: #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+        }
+
+        .quiz-option-indicator {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            transition: all var(--transition-fast);
+        }
+
+        .quiz-option-item.selected .quiz-option-indicator {
+            background: #38bdf8;
+            border-color: #38bdf8;
+            color: #090d16;
+            font-weight: 800;
+        }
+
+        .quiz-option-text {
+            font-size: 0.88rem;
+            line-height: 1.4;
+            color: var(--text-main);
+            flex-grow: 1;
+        }
+
+        .quiz-export-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.75rem;
+        }
+
+        .btn-pdf-export {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.4rem 0.75rem;
+            border-radius: var(--radius-xs);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-pdf-export:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-pdf-answers:hover {
+            border-color: #34d399;
+            color: #34d399;
+            background: rgba(52, 211, 153, 0.12);
+        }
+
+        .quiz-title-link:hover {
+            color: #38bdf8 !important;
+            text-decoration: underline;
+        }
+
+        .btn-delete-quiz:hover {
+            background: rgba(248, 113, 113, 0.2) !important;
+            border-color: #f87171 !important;
+            color: #f87171 !important;
+        }
     </style>
 </head>
+
 <body>
 
     <!-- Professional Top Navbar -->
@@ -2106,7 +2538,8 @@
 
         <div class="header-actions">
             <!-- AI Engine Ready button (Clickable Popover) -->
-            <button class="btn-header-status" id="btnEngineStatus" onclick="toggleEnginePopover()" title="Click to view AI Engine Architecture & Status">
+            <button class="btn-header-status" id="btnEngineStatus" onclick="toggleEnginePopover()"
+                title="Click to view AI Engine Architecture & Status">
                 <span class="pulse-dot"></span>
                 <span>AI Engine Ready</span>
                 <i class="fa-solid fa-chevron-down" style="font-size: 0.65rem; color: var(--text-muted);"></i>
@@ -2119,11 +2552,15 @@
                     <span>AI Engine Architecture</span>
                 </div>
                 <ul class="engine-feature-list">
-                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Speech Analysis (Gemini/Whisper ASR)</li>
-                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Visual Analysis (Gemini Vision)</li>
+                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Speech Analysis
+                        (Gemini/Whisper ASR)</li>
+                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Visual Analysis (Gemini
+                        Vision)</li>
                     <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> OCR & On-Screen Text</li>
-                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Temporal Scene Detection</li>
-                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Grounded Anti-Hallucination AI</li>
+                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Temporal Scene Detection
+                    </li>
+                    <li class="engine-feature-item"><i class="fa-solid fa-circle-check"></i> Grounded Anti-Hallucination
+                        AI</li>
                 </ul>
                 <div class="popover-footer-badge">
                     <span>Status: Fully Operational</span>
@@ -2134,7 +2571,7 @@
     </header>
 
     <!-- Main 3-Column Container -->
-    <div class="main-container">
+    <div class="main-container" id="mainContainer">
 
         <!-- =========================================================================
              LEFT PANEL: VIDEO LIBRARY & INGESTION
@@ -2145,6 +2582,10 @@
                     <i class="fa-solid fa-circle-plus"></i>
                     <span>Add Video</span>
                 </div>
+                <button class="btn-chat-action" id="btnToggleUpload" onclick="toggleUploadSection()"
+                    title="Collapse/Expand upload section" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;">
+                    <i class="fa-solid fa-chevron-up" id="uploadToggleIcon"></i>
+                </button>
             </div>
 
             <!-- Upload Section -->
@@ -2166,7 +2607,8 @@
                         <i class="fa-solid fa-cloud-arrow-up"></i>
                     </div>
                     <p style="font-size: 0.82rem; font-weight: 700; color: #f1f5f9;">Drag & Drop video here</p>
-                    <p style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.2rem;">Supports MP4, MOV, MKV, AVI • Up to 50 GB</p>
+                    <p style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.2rem;">Supports MP4, MOV, MKV,
+                        AVI • Up to 50 GB</p>
                     <input type="file" id="fileInput" accept=".mp4,.mov,.mkv,.avi" multiple style="display: none;">
                 </div>
 
@@ -2174,7 +2616,9 @@
                 <div class="url-input-pane" id="paneUrl" style="display: none;">
                     <div class="url-box-wrap">
                         <i class="fa-solid fa-video" style="color: var(--primary); font-size: 0.95rem;"></i>
-                        <input type="url" id="videoUrlInput" placeholder="Paste link: YouTube, Zoom, RTSP, or direct MP4..." onkeypress="handleUrlKeyPress(event)">
+                        <input type="url" id="videoUrlInput"
+                            placeholder="Paste link: YouTube, Zoom, RTSP, or direct MP4..."
+                            onkeypress="handleUrlKeyPress(event)">
                     </div>
                     <button class="btn-fetch-url" id="btnFetchUrl" onclick="importFromUrl()">
                         <i class="fa-solid fa-bolt"></i>
@@ -2195,10 +2639,14 @@
                         <div class="progress-bar-fill" id="progressBar"></div>
                     </div>
                     <div class="stepper-pipeline" id="stepperPipeline">
-                        <div class="stepper-step completed" id="stepUpload"><i class="fa-solid fa-circle-check"></i> <span>Video Uploaded</span></div>
-                        <div class="stepper-step active" id="stepAudio"><i class="fa-solid fa-circle-notch"></i> <span>Audio Normalization & ASR</span></div>
-                        <div class="stepper-step pending" id="stepVisual"><i class="fa-solid fa-circle"></i> <span>Multimodal Visual Sampling</span></div>
-                        <div class="stepper-step pending" id="stepIndex"><i class="fa-solid fa-circle"></i> <span>Temporal pgvector Indexing</span></div>
+                        <div class="stepper-step completed" id="stepUpload"><i class="fa-solid fa-circle-check"></i>
+                            <span>Video Uploaded</span></div>
+                        <div class="stepper-step active" id="stepAudio"><i class="fa-solid fa-circle-notch"></i>
+                            <span>Audio Normalization & ASR</span></div>
+                        <div class="stepper-step pending" id="stepVisual"><i class="fa-solid fa-circle"></i>
+                            <span>Multimodal Visual Sampling</span></div>
+                        <div class="stepper-step pending" id="stepIndex"><i class="fa-solid fa-circle"></i>
+                            <span>Temporal pgvector Indexing</span></div>
                     </div>
                 </div>
             </div>
@@ -2209,7 +2657,8 @@
                     <i class="fa-solid fa-layer-group"></i>
                     <span>Video Library</span>
                 </div>
-                <button id="btnClearFailed" class="btn-clear-failed" onclick="clearFailedVideos()" title="Clean up failed videos" style="display: none;">
+                <button id="btnClearFailed" class="btn-clear-failed" onclick="clearFailedVideos()"
+                    title="Clean up failed videos" style="display: none;">
                     <i class="fa-solid fa-broom"></i> <span>Clean</span>
                 </button>
             </div>
@@ -2217,18 +2666,22 @@
             <div class="library-controls">
                 <div class="search-box">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="videoLibrarySearch" placeholder="Search videos..." oninput="filterLibraryVideos()">
+                    <input type="text" id="videoLibrarySearch" placeholder="Search videos..."
+                        oninput="filterLibraryVideos()">
                 </div>
                 <div class="filter-pills">
                     <button class="filter-pill active" id="filterAll" onclick="setLibraryFilter('all')">All</button>
-                    <button class="filter-pill" id="filterCompleted" onclick="setLibraryFilter('completed')">Completed</button>
-                    <button class="filter-pill" id="filterProcessing" onclick="setLibraryFilter('processing')">Processing</button>
+                    <button class="filter-pill" id="filterCompleted"
+                        onclick="setLibraryFilter('completed')">Completed</button>
+                    <button class="filter-pill" id="filterProcessing"
+                        onclick="setLibraryFilter('processing')">Processing</button>
                 </div>
             </div>
 
             <!-- Video Cards List -->
             <div class="video-list" id="videoList">
-                <p style="font-size: 0.76rem; color: var(--text-dark); text-align: center; padding-top: 1rem;">Loading videos...</p>
+                <p style="font-size: 0.76rem; color: var(--text-dark); text-align: center; padding-top: 1rem;">Loading
+                    videos...</p>
             </div>
         </div>
 
@@ -2244,7 +2697,8 @@
                 </div>
                 <div class="player-actions">
                     <div id="playerMetaBadge" style="display: none; display: flex; align-items: center; gap: 0.45rem;">
-                        <span class="badge-classification badge-classification-knowledge" id="playerVideoTypeBadge" style="display: none;">
+                        <span class="badge-classification badge-classification-knowledge" id="playerVideoTypeBadge"
+                            style="display: none;">
                             <i class="fa-solid fa-graduation-cap" id="playerVideoTypeIcon"></i>
                             <span id="playerVideoTypeText">Video Type: Learning / Knowledge Content</span>
                         </span>
@@ -2260,19 +2714,23 @@
                         </button>
                         <div class="layers-dropdown" id="layersDropdown">
                             <label class="layer-checkbox-item">
-                                <input type="checkbox" id="layerScenesToggle" checked onchange="toggleTrackVisibility('scenes')">
+                                <input type="checkbox" id="layerScenesToggle" checked
+                                    onchange="toggleTrackVisibility('scenes')">
                                 <span>Scenes Track</span>
                             </label>
                             <label class="layer-checkbox-item">
-                                <input type="checkbox" id="layerSpeechToggle" checked onchange="toggleTrackVisibility('speech')">
+                                <input type="checkbox" id="layerSpeechToggle" checked
+                                    onchange="toggleTrackVisibility('speech')">
                                 <span>Speech Track</span>
                             </label>
                             <label class="layer-checkbox-item">
-                                <input type="checkbox" id="layerOcrToggle" checked onchange="toggleTrackVisibility('ocr')">
+                                <input type="checkbox" id="layerOcrToggle" checked
+                                    onchange="toggleTrackVisibility('ocr')">
                                 <span>OCR Text Track</span>
                             </label>
                             <label class="layer-checkbox-item">
-                                <input type="checkbox" id="layerPeopleToggle" checked onchange="toggleTrackVisibility('people')">
+                                <input type="checkbox" id="layerPeopleToggle" checked
+                                    onchange="toggleTrackVisibility('people')">
                                 <span>People Track</span>
                             </label>
                         </div>
@@ -2290,68 +2748,45 @@
             <!-- Inspector Tabs Directly Under Video Player -->
             <div class="inspector-panel">
                 <div class="inspector-tabs">
-                    <button class="tab-btn active" id="tabBtnOverview" onclick="switchTab('overview')">
+                    <button class="tab-btn" id="tabBtnOverview" onclick="openContextModal('summary')" title="Open Summary in Pop-up Screen">
                         <i class="fa-solid fa-file-lines"></i>
                         <span>Summary</span>
                     </button>
-                    <button class="tab-btn" id="tabBtnTranscript" onclick="switchTab('transcript')">
+                    <button class="tab-btn" id="tabBtnTranscript" onclick="openContextModal('transcript')" title="Open Speech Transcript in Pop-up Screen">
                         <i class="fa-solid fa-microphone-lines"></i>
                         <span>Transcript</span>
                         <span class="tab-badge" id="tabTranscriptBadge">0</span>
                     </button>
-                    <button class="tab-btn" id="tabBtnVisuals" onclick="switchTab('visuals')">
+                    <button class="tab-btn" id="tabBtnVisuals" onclick="openContextModal('visuals')" title="Open Visual Scenes in Pop-up Screen">
                         <i class="fa-solid fa-camera"></i>
                         <span>Visual Scenes</span>
                         <span class="tab-badge" id="tabVisualsBadge">0</span>
                     </button>
-                    <button class="tab-btn tab-btn-learning" id="tabBtnQuiz" onclick="switchTab('quiz')" style="display: none;">
+                    <button class="tab-btn tab-btn-learning" id="tabBtnQuiz" onclick="openContextModal('quiz')" style="display: none;" title="Generate Video Knowledge Quiz">
                         <i class="fa-solid fa-graduation-cap" style="color: #818cf8;"></i>
-                        <span>Generate Quiz</span>
+                        <span>Quiz</span>
                     </button>
-                    <button class="tab-btn tab-btn-learning" id="tabBtnSelfTest" onclick="switchTab('selftest')" style="display: none;">
+                    <button class="tab-btn tab-btn-learning" id="tabBtnSelfTest" onclick="openContextModal('selftest')" style="display: none;" title="Test My Understanding">
                         <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
-                        <span>Test My Understanding</span>
+                        <span>Understanding</span>
                     </button>
                 </div>
 
-                <!-- Tab Panes -->
-                <!-- Pane 1: Overview (Summary, Key Moments) -->
-                <div class="tab-pane" id="paneOverview" style="display: flex;">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-file-lines fa-2x"></i>
-                        <p>Select a video to view executive summary and timeline.</p>
-                    </div>
-                </div>
-
-                <!-- Pane 2: Transcript -->
-                <div class="tab-pane" id="paneTranscript" style="display: none;">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-microphone-lines fa-2x"></i>
-                        <p>Select a video to view synchronized speech & verbatim utterances.</p>
-                    </div>
-                </div>
-
-                <!-- Pane 3: Visual Scenes -->
-                <div class="tab-pane" id="paneVisuals" style="display: none;">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-camera fa-2x"></i>
-                        <p>Select a video to inspect visual scenes and detected keyframes.</p>
-                    </div>
-                </div>
-
-                <!-- Pane 4: Quiz & Knowledge Assessment -->
-                <div class="tab-pane" id="paneQuiz" style="display: none;">
+                <!-- Hidden containers for learning assessment modals -->
+                <div id="hiddenLearningPanes" style="display: none;">
                     <div class="quiz-container" id="quizContainer">
                         <!-- 1. Quiz Config Screen -->
                         <div class="quiz-config-card" id="quizConfigCard">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <div>
-                                    <div style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
+                                    <div
+                                        style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
                                         <i class="fa-solid fa-graduation-cap" style="color: #818cf8;"></i>
                                         <span>Video Knowledge Quiz Generator</span>
                                     </div>
                                     <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
-                                        Generate assessment questions strictly grounded in this video's actual speech, slides, and demonstration.
+                                        Generate assessment questions strictly grounded in this video's actual speech,
+                                        slides, and demonstration.
                                     </p>
                                 </div>
                             </div>
@@ -2385,43 +2820,55 @@
                             </div>
 
                             <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                                <button class="btn-generate-quiz" id="btnStartGenerateQuiz" onclick="generateQuizForActiveVideo()">
+                                <button class="btn-generate-quiz" id="btnStartGenerateQuiz"
+                                    onclick="generateQuizForActiveVideo()">
                                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                                     <span>Generate Quiz</span>
                                 </button>
-                                <span id="quizGenStatus" style="font-size: 0.78rem; color: var(--text-muted); display: none;">
+                                <span id="quizGenStatus"
+                                    style="font-size: 0.78rem; color: var(--text-muted); display: none;">
                                     <i class="fa-solid fa-spinner fa-spin"></i> Grounding questions in video segments...
                                 </span>
                             </div>
 
                             <!-- List of Past Quizzes -->
                             <div id="pastQuizzesSection" style="margin-top: 0.5rem; display: none;">
-                                <div style="font-size: 0.74rem; font-weight: 700; color: var(--text-dark); text-transform: uppercase; margin-bottom: 0.4rem;">
+                                <div
+                                    style="font-size: 0.74rem; font-weight: 700; color: var(--text-dark); text-transform: uppercase; margin-bottom: 0.4rem;">
                                     Available Quizzes for this Video
                                 </div>
-                                <div id="pastQuizzesList" style="display: flex; flex-direction: column; gap: 0.4rem;"></div>
+                                <div id="pastQuizzesList" style="display: flex; flex-direction: column; gap: 0.4rem;">
+                                </div>
                             </div>
                         </div>
 
                         <!-- 2. Active Quiz Taking Screen -->
                         <div class="quiz-taking-wrap" id="quizTakingWrap" style="display: none;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 0.8rem; font-weight: 700; color: #818cf8;" id="quizTakingProgressText">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                <button class="filter-pill" onclick="cancelQuizTaking()" title="Back to Quiz Generator">
+                                    <i class="fa-solid fa-arrow-left"></i> Back
+                                </button>
+                                <div style="font-size: 0.8rem; font-weight: 700; color: #818cf8;"
+                                    id="quizTakingProgressText">
                                     Question 1 of 5
                                 </div>
-                                <div style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 0.15rem 0.5rem; border-radius: var(--radius-xs);" id="quizTakingTopicBadge">
+                                <div style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 0.15rem 0.5rem; border-radius: var(--radius-xs);"
+                                    id="quizTakingTopicBadge">
                                     Topic
                                 </div>
                             </div>
                             <div class="quiz-progress-bar-bg">
-                                <div class="quiz-progress-bar-fill" id="quizTakingProgressBar" style="width: 20%;"></div>
+                                <div class="quiz-progress-bar-fill" id="quizTakingProgressBar" style="width: 20%;">
+                                </div>
                             </div>
 
                             <div class="quiz-question-card">
-                                <div style="font-size: 1rem; font-weight: 700; color: #f8fafc; line-height: 1.45;" id="quizQuestionText">
+                                <div style="font-size: 1rem; font-weight: 700; color: #f8fafc; line-height: 1.45;"
+                                    id="quizQuestionText">
                                     Question loading...
                                 </div>
-                                <div id="quizOptionsContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <div id="quizOptionsContainer"
+                                    style="display: flex; flex-direction: column; gap: 0.5rem;">
                                     <!-- Dynamic options or textarea -->
                                 </div>
                             </div>
@@ -2435,7 +2882,8 @@
                                     <button class="filter-pill" id="btnQuizNext" onclick="navQuizQuestion(1)">
                                         Next <i class="fa-solid fa-arrow-right"></i>
                                     </button>
-                                    <button class="btn-generate-quiz" id="btnQuizSubmit" onclick="submitQuizAnswers()" style="display: none; padding: 0.4rem 0.9rem; font-size: 0.8rem;">
+                                    <button class="btn-generate-quiz" id="btnQuizSubmit" onclick="submitQuizAnswers()"
+                                        style="display: none; padding: 0.4rem 0.9rem; font-size: 0.8rem;">
                                         <i class="fa-solid fa-check-circle"></i> Submit Quiz
                                     </button>
                                 </div>
@@ -2447,29 +2895,42 @@
                             <!-- Populated dynamically by renderQuizEvaluation() -->
                         </div>
                     </div>
-                </div>
 
-                <!-- Pane 5: Test My Understanding -->
-                <div class="tab-pane" id="paneSelfTest" style="display: none;">
-                    <div class="quiz-container">
+                    <div class="quiz-container" id="selfTestWrap">
                         <div class="quiz-config-card">
-                            <div style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
-                                <span>Test My Understanding</span>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <div style="font-size: 1rem; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
+                                        <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
+                                        <span>Test My Understanding</span>
+                                    </div>
+                                    <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                        The AI model generates a conceptual understanding question grounded in this video. Write your explanation to test your mastery.
+                                    </p>
+                                </div>
                             </div>
-                            <p style="font-size: 0.78rem; color: var(--text-muted);">
-                                Frame a concept question in your own words and write your explanation. The system evaluates your understanding against the uploaded video and guides you to the exact timestamp to relearn if needed.
-                            </p>
 
                             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                                <div class="config-group">
-                                    <label class="config-label">Question / Topic</label>
-                                    <input type="text" class="config-select" id="selfTestQuestionInput" placeholder="e.g. What is RAG? or Explain Saksham LMS in simple words...">
+                                <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-sm); padding: 0.85rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                        <span style="font-size: 0.7rem; font-weight: 700; color: var(--primary); text-transform: uppercase;">
+                                            <i class="fa-solid fa-robot"></i> Model Question
+                                        </span>
+                                        <button class="filter-pill" style="font-size: 0.68rem; padding: 0.15rem 0.45rem;" onclick="loadSelfTestPromptQuestion()" title="Generate a new AI model question">
+                                            <i class="fa-solid fa-rotate"></i> New Question
+                                        </button>
+                                    </div>
+                                    <div id="selfTestModelQuestionText" style="font-size: 0.95rem; font-weight: 700; color: #f8fafc; line-height: 1.45;">
+                                        Loading AI concept question from video...
+                                    </div>
+                                    <input type="hidden" id="selfTestQuestionInput" value="">
                                 </div>
+
                                 <div class="config-group">
                                     <label class="config-label">Your Written Explanation</label>
-                                    <textarea class="config-select" id="selfTestAnswerInput" rows="3" placeholder="Write your understanding here based on the video..."></textarea>
+                                    <textarea class="config-select" id="selfTestAnswerInput" rows="3" placeholder="Write your explanation here based on the video..."></textarea>
                                 </div>
+
                                 <div style="display: flex; gap: 0.75rem; align-items: center;">
                                     <button class="btn-generate-quiz" id="btnSubmitSelfTest" onclick="submitSelfTest()">
                                         <i class="fa-solid fa-check-double"></i>
@@ -2501,9 +2962,11 @@
                         <i class="fa-solid fa-brain" style="color: var(--primary);"></i>
                         <span>VideoIntel Copilot</span>
                     </div>
-                    <div class="copilot-subtitle" id="copilotSubtitle" style="display: flex; align-items: center; gap: 0.4rem;">
+                    <div class="copilot-subtitle" id="copilotSubtitle"
+                        style="display: flex; align-items: center; gap: 0.4rem;">
                         <span class="pulse-dot-cyan" id="copilotPulseDot"></span>
-                        <span id="copilotScopeText">Unified search across all <strong id="scopeAllCountBadge" style="color: #38bdf8;">0</strong> videos</span>
+                        <span id="copilotScopeText">Unified search across all <strong id="scopeAllCountBadge"
+                                style="color: #38bdf8;">0</strong> videos</span>
                     </div>
                 </div>
                 <div class="chat-header-actions">
@@ -2516,12 +2979,14 @@
             <!-- Sleek Modern Scope Switcher (All Videos vs This Video) -->
             <div class="copilot-scope-nav">
                 <div class="scope-pill-container">
-                    <button class="scope-pill-btn active" id="scopeBtnAll" onclick="setChatScope('all')" title="Search and correlate across all library videos">
+                    <button class="scope-pill-btn active" id="scopeBtnAll" onclick="setChatScope('all')"
+                        title="Search and correlate across all library videos">
                         <i class="fa-solid fa-earth-americas"></i>
                         <span>All Videos</span>
                         <span class="scope-counter" id="scopeAllCountPill">0</span>
                     </button>
-                    <button class="scope-pill-btn" id="scopeBtnCurrent" onclick="setChatScope('current')" title="Focus AI strictly on currently selected video">
+                    <button class="scope-pill-btn" id="scopeBtnCurrent" onclick="setChatScope('current')"
+                        title="Focus AI strictly on currently selected video">
                         <i class="fa-solid fa-film"></i>
                         <span>This Video</span>
                         <span class="scope-active-dot" id="currentVideoActiveDot" style="display: none;"></span>
@@ -2532,24 +2997,26 @@
             <!-- Messages Log -->
             <div class="chat-messages" id="chatMessages">
                 <div class="message assistant">
-                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
+                    <div
+                        style="font-weight: 600; color: #38bdf8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.45rem;">
                         <i class="fa-solid fa-shield-halved"></i> Cross-Video Intelligence Active
                     </div>
-                    Ask any question across all uploaded videos. I search visual scenes, spoken audio transcripts, and on-screen text to trace people, events, and activities with exact video names and timestamps.
+                    Ask any question across all uploaded videos. I search visual scenes, spoken audio transcripts, and
+                    on-screen text to trace people, events, and activities with exact video names and timestamps.
                 </div>
             </div>
 
             <!-- Quick Suggestion Prompts -->
             <div class="suggestions-bar" id="chatSuggestionsBar">
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Find any suspicious activity')">✦ Suspicious activity</button>
+                <button class="suggestion-chip"
+                    onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all
+                    videos</button>
             </div>
 
             <!-- Chat Input Box -->
             <div class="chat-input-box">
-                <input type="text" id="queryInput" placeholder="Ask anything across all videos..." onkeypress="handleKeyPress(event)">
+                <input type="text" id="queryInput" placeholder="Ask anything across all videos..."
+                    onkeypress="handleKeyPress(event)">
                 <button class="btn-send" id="sendBtn" onclick="sendChatMessage()" title="Send Question">
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
@@ -2567,7 +3034,76 @@
             </div>
         </div>
     </div>
+    </div>
 
-    <script src="/static/app.js?v=5.4"></script>
+    <!-- Full Context Inspection Modal Popup Screen -->
+    <div class="context-modal-backdrop" id="contextModal" style="display: none;"
+        onclick="if(event.target === this) closeContextModal()">
+        <div class="context-modal-card" onclick="event.stopPropagation()">
+            <div class="context-modal-header">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div
+                        style="width: 38px; height: 38px; border-radius: var(--radius-sm); background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                        <i class="fa-solid fa-up-right-and-down-left-from-center" style="font-size: 1.1rem;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.05rem; font-weight: 800; color: #f8fafc;" id="modalVideoTitle">Full
+                            Video Context &amp; Multimodal Intelligence</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);" id="modalVideoSub">Expanded
+                            full-screen context viewer for summary, speech transcripts, and visual scenes</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.65rem;">
+                    <!-- Filter / Search bar in popup modal -->
+                    <div class="search-box" style="width: 240px; padding: 0.3rem 0.65rem;">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="modalSearchInput" placeholder="Filter transcript/scenes..."
+                            oninput="filterModalContext()">
+                    </div>
+                    <button class="btn-modal-close" onclick="closeContextModal()" title="Close popup screen (ESC)">
+                        <i class="fa-solid fa-xmark" style="font-size: 1rem;"></i>
+                        <span>Close</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="context-modal-tabs">
+                <button class="modal-tab-btn active" id="mTabSummary" onclick="switchModalTab('summary')">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Executive Summary</span>
+                </button>
+                <button class="modal-tab-btn" id="mTabTranscript" onclick="switchModalTab('transcript')">
+                    <i class="fa-solid fa-microphone-lines"></i>
+                    <span>Complete Speech Transcript</span>
+                    <span class="tab-badge" id="modalTranscriptBadge"
+                        style="background: rgba(56, 189, 248, 0.2); color: var(--primary);">0</span>
+                </button>
+                <button class="modal-tab-btn" id="mTabVisuals" onclick="switchModalTab('visuals')">
+                    <i class="fa-solid fa-camera"></i>
+                    <span>Visual Scenes &amp; OCR</span>
+                    <span class="tab-badge" id="modalVisualsBadge"
+                        style="background: rgba(56, 189, 248, 0.2); color: var(--primary);">0</span>
+                </button>
+                <button class="modal-tab-btn modal-tab-btn-learning" id="mTabQuiz" onclick="switchModalTab('quiz')"
+                    style="display: none;" title="Generate Video Knowledge Quiz">
+                    <i class="fa-solid fa-graduation-cap" style="color: #818cf8;"></i>
+                    <span>Knowledge Quiz</span>
+                </button>
+                <button class="modal-tab-btn modal-tab-btn-learning" id="mTabSelfTest"
+                    onclick="switchModalTab('selftest')" style="display: none;" title="Test My Understanding">
+                    <i class="fa-solid fa-lightbulb" style="color: #fbbf24;"></i>
+                    <span>Test My Understanding</span>
+                </button>
+            </div>
+
+            <div class="context-modal-body" id="modalBody">
+                <p style="color: var(--text-dark); text-align: center; padding: 2rem;">Select a video from the library
+                    to inspect its full context.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=5.5"></script>
 </body>
+
 </html>

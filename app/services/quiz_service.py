@@ -43,6 +43,31 @@ def format_seconds_to_timestamp(seconds: float) -> str:
     return f"{mins:02d}:{secs:02d}"
 
 
+def sanitize_question_text(q_text: str, topic: str = "this video") -> str:
+    """Ensure question stems are direct domain conceptual questions without timestamp noise or awkward quotes."""
+    if not q_text:
+        return f"What primary concept or capability is demonstrated regarding {topic}?"
+
+    q = q_text.strip()
+    q = re.sub(r'according to the video (?:at [^,\.\?\n]+)?', '', q, flags=re.IGNORECASE)
+    q = re.sub(r'highlighted in the video (?:at [^,\.\?\n]+)?', '', q, flags=re.IGNORECASE)
+    q = re.sub(r'based on the video (?:at [^,\.\?\n]+)?', '', q, flags=re.IGNORECASE)
+    q = re.sub(r'(?:at|in|between|during)?\s*\b\d{1,2}:\d{2}\s*(?:–|-|to)\s*\d{1,2}:\d{2}\b', '', q, flags=re.IGNORECASE)
+    q = re.sub(r'the footage is unrelated to [^\.\?\n]+', f'the topic covers {topic}', q, flags=re.IGNORECASE)
+    q = re.sub(r'\s+', ' ', q).strip()
+
+    if q.startswith(',') or q.startswith(':') or q.startswith('-'):
+        q = q[1:].strip()
+
+    if not q or len(q) < 10 or q.lower().startswith('what key information is') or q.lower().startswith('what key concept is'):
+        q = f"What primary concept or capability is demonstrated regarding {topic}?"
+
+    if not q.endswith('?') and not q.endswith('.'):
+        q += '?'
+
+    return q
+
+
 class QuizService:
     """
     Core service for Video Knowledge Assessment & Learning Loop:
@@ -167,13 +192,13 @@ class QuizService:
         context_str = "\n".join(context_lines)
 
         prompt = (
-            f"You are a professional educational assessor. Create a grounded {difficulty}-difficulty quiz "
-            f"consisting of exactly {num_questions} questions for the video '{video.filename}'.\n"
+            f"You are a professional educational assessor creating an assessment for the video '{video.filename}'.\n"
+            f"Generate a grounded {difficulty}-difficulty quiz of exactly {num_questions} questions.\n"
             f"Preferred question type: {question_type} (options: 'mcq', 'true_false', 'short_answer', or 'mixed').\n\n"
-            "STRICT GROUNDING RULES:\n"
-            "1. ONLY create questions based on the provided video context below. DO NOT invent outside facts.\n"
-            "2. For each question, link to the EXACT video timestamp range where the answer is explained.\n"
-            "3. For MCQ questions, provide 4 options (A, B, C, D) and specify the exact correct option text.\n"
+            "STRICT QUESTION & GROUNDING RULES:\n"
+            "1. UNDERSTAND THE VIDEO CONTENT and frame natural, meaningful, conceptual educational questions (e.g., 'What is RAG?', 'What primary capability is demonstrated?', 'Which dataset is referenced?').\n"
+            "2. NEVER create awkward fill-in-the-blank or raw quotation questions like 'According to the video at MM:SS, the content addresses: \"It will reply...\"'.\n"
+            "3. For MCQ questions, provide 4 clear, plausible, distinct conceptual options (A, B, C, D) and specify the exact correct option text. DO NOT use raw truncated transcript fragments as options.\n"
             "4. For True/False questions, provide options ['True', 'False'] and specify 'True' or 'False'.\n"
             "5. For Short Answer questions, options must be null, and correct_answer must be a clear 1-2 sentence reference answer.\n"
             "6. Include a concise topic name (e.g. 'RAG', 'Architecture', 'UI Features') and an explanation.\n\n"
@@ -194,7 +219,7 @@ class QuizService:
             "]"
         )
 
-        for model_name in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash"]:
+        for model_name in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
             try:
                 model = genai.GenerativeModel(model_name)
                 res = await asyncio.wait_for(
@@ -209,6 +234,9 @@ class QuizService:
                         clean = clean.split("```")[1].split("```")[0].strip()
                     parsed = json.loads(clean)
                     if isinstance(parsed, list) and len(parsed) > 0:
+                        for item in parsed:
+                            if isinstance(item, dict) and "question" in item:
+                                item["question"] = sanitize_question_text(item["question"], item.get("topic", "this video"))
                         return parsed[:num_questions]
             except Exception as e:
                 logger.warning(f"Model {model_name} quiz generation error: {e}")
@@ -237,7 +265,6 @@ class QuizService:
             informative_segments = segments
 
         step = max(1, len(informative_segments) // max(1, num_questions))
-        selected_segs = informative_segments[::step][:num_questions]
 
         # While we have fewer questions than needed, repeat segments with different question angles
         idx = 0
@@ -263,15 +290,21 @@ class QuizService:
             text_body = seg.transcript_text or seg.ocr_text or seg.visual_description or f"Video overview at {t_fmt}"
             clean_text = text_body.strip()
 
+            # Extract clean summary sentence without raw quotes
+            clean_summary = clean_text
+            if len(clean_text) > 90:
+                first_sent = clean_text.split('.')[0].strip()
+                clean_summary = first_sent if len(first_sent) >= 15 else clean_text[:90].strip()
+
             # Derive topic
-            topic = "General Knowledge"
+            topic = "General Concept"
             for kw, top in [
-                ("saksham", "LMS Platform"),
-                ("moodle", "E-Learning Systems"),
+                ("saksham", "Saksham LMS Platform"),
+                ("moodle", "Moodle E-Learning"),
                 ("dashboard", "System Dashboard"),
                 ("subscriber", "Channel Metrics"),
                 ("rag", "Retrieval Augmented Generation"),
-                ("embedding", "Embeddings & Vectors"),
+                ("embedding", "Embeddings & Vector Search"),
                 ("presentation", "Presentation Overview"),
                 ("person", "Visual Identification"),
                 ("screen", "On-Screen Content")
@@ -283,13 +316,13 @@ class QuizService:
             if curr_type == "true_false":
                 is_true = (len(questions) % 2 == 0)
                 if is_true:
-                    q_text = f"According to the video at {t_fmt}, the content addresses: '{clean_text[:110]}'."
+                    q_text = f"Does the video address key principles of {topic}?"
                     ans = "True"
                     expl = f"Verified directly from the video recording at {t_fmt}."
                 else:
-                    q_text = f"According to the video at {t_fmt}, the footage is unrelated to '{clean_text[:60]}'."
+                    q_text = f"Does the video focus on unrelated external topics rather than {topic}?"
                     ans = "False"
-                    expl = f"Incorrect; the footage at {t_fmt} specifically addresses this concept."
+                    expl = f"Incorrect; the footage at {t_fmt} specifically addresses {topic}."
 
                 questions.append({
                     "question": q_text,
@@ -304,8 +337,8 @@ class QuizService:
                 })
 
             elif curr_type == "short_answer":
-                q_text = f"Based on the video segment at {t_fmt}, explain what is presented regarding {topic.lower()}."
-                ans = clean_text[:160]
+                q_text = f"Explain the primary mechanism or core workflow regarding {topic}."
+                ans = clean_summary
                 questions.append({
                     "question": q_text,
                     "question_type": "short_answer",
@@ -319,11 +352,14 @@ class QuizService:
                 })
 
             else:  # mcq
-                q_text = f"What key information is highlighted in the video at {t_fmt}?"
-                correct_opt = clean_text[:90]
-                distractor_1 = "No information is presented during this section."
-                distractor_2 = "External historical background unrelated to the video."
-                distractor_3 = "Unsubstantiated claims contrary to the demonstration."
+                q_text = f"What primary concept or function is demonstrated regarding {topic}?"
+                correct_opt = f"Demonstrates {clean_summary.lower() if not clean_summary.lower().startswith('demonstrates') else clean_summary.lower()}"
+                if len(correct_opt) > 120:
+                    correct_opt = correct_opt[:117] + "..."
+
+                distractor_1 = f"Explores unrelated historical background unrelated to {topic.lower()}"
+                distractor_2 = f"No substantive features or information are presented during this section"
+                distractor_3 = f"Presents claims contrary to the video demonstration"
 
                 opts = [correct_opt, distractor_1, distractor_2, distractor_3]
                 questions.append({
@@ -376,12 +412,29 @@ class QuizService:
 
             if not is_unanswered:
                 if q.question_type in ["mcq", "true_false"]:
-                    # Exact or normalized match
+                    # 1. Exact or normalized match
                     clean_u = re.sub(r'[^a-zA-Z0-9]', '', user_ans).lower()
                     clean_c = re.sub(r'[^a-zA-Z0-9]', '', q.correct_answer).lower()
                     if clean_u == clean_c or user_ans.strip().lower() == q.correct_answer.strip().lower():
                         is_correct = True
                         q_score = 1.0
+                    else:
+                        # 2. Check if user_ans is an index (0, 1, 2, 3) or letter (A, B, C, D) mapping to q.options
+                        opts = q.options or []
+                        if isinstance(opts, list) and len(opts) > 0:
+                            u_text = None
+                            if user_ans.isdigit() and 0 <= int(user_ans) < len(opts):
+                                u_text = opts[int(user_ans)]
+                            elif len(user_ans) == 1 and user_ans.upper() in ['A', 'B', 'C', 'D', 'E', 'F']:
+                                idx = ord(user_ans.upper()) - 65
+                                if 0 <= idx < len(opts):
+                                    u_text = opts[idx]
+                            
+                            if u_text:
+                                clean_ut = re.sub(r'[^a-zA-Z0-9]', '', u_text).lower()
+                                if clean_ut == clean_c or u_text.strip().lower() == q.correct_answer.strip().lower():
+                                    is_correct = True
+                                    q_score = 1.0
                 else:
                     # Short Answer semantic evaluation
                     is_correct, q_score = await self._evaluate_short_answer(
@@ -505,7 +558,7 @@ class QuizService:
                     "SCORE: [0.0 to 1.0]\n"
                     "IS_CORRECT: [true or false]"
                 )
-                for model_name in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash"]:
+                for model_name in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
                     try:
                         model = genai.GenerativeModel(model_name)
                         res = await asyncio.wait_for(
@@ -535,6 +588,100 @@ class QuizService:
         is_corr = (ratio >= 0.35)
         score = min(1.0, ratio * 1.5)
         return is_corr, round(score, 2)
+
+    async def generate_self_test_prompt(
+        self,
+        db: AsyncSession,
+        video: Video
+    ) -> Dict[str, Any]:
+        """
+        Generates an AI question / concept prompt for 'Test My Understanding'
+        based on key video segments.
+        """
+        if getattr(video, "video_type", "knowledge") == "observational":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Test My Understanding is disabled for observational/surveillance footage."
+            )
+
+        stmt = select(VideoSegment).where(VideoSegment.video_id == video.id).order_by(VideoSegment.start_time)
+        segments = (await db.execute(stmt)).scalars().all()
+        if not segments:
+            raise HTTPException(status_code=400, detail="Video has no indexed segments.")
+
+        import random
+        seg = random.choice(segments)
+        t_fmt = f"{format_seconds_to_timestamp(seg.start_time)}–{format_seconds_to_timestamp(seg.end_time)}"
+        concept = seg.transcript_text or seg.ocr_text or seg.visual_description or video.summary or "Video concept"
+
+        # Derive clean topic
+        topic = "Video Concept"
+        for kw, top in [
+            ("saksham", "Saksham LMS Platform"),
+            ("moodle", "Moodle E-Learning"),
+            ("dashboard", "System Dashboard"),
+            ("subscriber", "Channel Metrics"),
+            ("rag", "Retrieval Augmented Generation"),
+            ("embedding", "Embeddings & Vector Search"),
+            ("presentation", "Presentation Overview"),
+            ("person", "Visual Identification"),
+            ("screen", "On-Screen Content")
+        ]:
+            if kw in concept.lower() or kw in video.filename.lower():
+                topic = top
+                break
+
+        question = f"What key concept or capability is demonstrated regarding {topic}?"
+
+        if self.api_key and HAS_GENAI and self.api_key != "your_gemini_api_key_here":
+            try:
+                prompt = (
+                    "You are an expert tutor creating a direct domain conceptual question for a student.\n"
+                    f"Video Title: {video.filename}\n"
+                    f"Segment Subject Context: {concept}\n\n"
+                    "CRITICAL RULES:\n"
+                    "1. Generate 1 realistic, domain-specific conceptual question based on what is actually taught in this section (e.g. 'What is Retrieval Augmented Generation (RAG)?', 'How does vector embedding search work?').\n"
+                    "2. ABSOLUTELY DO NOT mention timestamps, time ranges (e.g. 'at 00:20-00:30', 'in the video at MM:SS'), or phrases like 'What key information is highlighted in the video at...' inside the question!\n"
+                    "3. Ask a direct, professional subject-matter question about the topic being discussed.\n\n"
+                    "Format output strictly as:\n"
+                    "QUESTION: [Your direct domain/subject question]\n"
+                    "TOPIC: [1-3 word topic name]"
+                )
+                for model_name in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
+                    try:
+                        model = genai.GenerativeModel(model_name)
+                        res = await asyncio.wait_for(
+                            asyncio.to_thread(model.generate_content, prompt),
+                            timeout=10.0
+                        )
+                        if res and res.text:
+                            m_q = re.search(r'QUESTION:\s*(.+)', res.text, re.IGNORECASE)
+                            m_t = re.search(r'TOPIC:\s*(.+)', res.text, re.IGNORECASE)
+                            if m_q:
+                                raw_q = m_q.group(1).strip()
+                                # Post-process: remove any stray timestamp strings or meta-phrasing
+                                raw_q = re.sub(r'(?:at|in|between|during)?\s*\b\d{1,2}:\d{2}\s*(?:–|-|to)\s*\d{1,2}:\d{2}\b', '', raw_q, flags=re.IGNORECASE)
+                                raw_q = re.sub(r'according to the video (?:at [^,\.\?\n]+)?', '', raw_q, flags=re.IGNORECASE)
+                                raw_q = re.sub(r'highlighted in the video (?:at [^,\.\?\n]+)?', '', raw_q, flags=re.IGNORECASE)
+                                raw_q = re.sub(r'\s+', ' ', raw_q).strip()
+                                if raw_q:
+                                    question = raw_q
+                            if m_t:
+                                topic = m_t.group(1).strip()
+                            break
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(f"AI self test prompt error: {e}")
+
+        return {
+            "video_id": video.id,
+            "question": question,
+            "topic": topic,
+            "timestamp_start": seg.start_time,
+            "timestamp_end": seg.end_time,
+            "timestamp_formatted": t_fmt
+        }
 
     async def evaluate_self_test(
         self,
@@ -612,7 +759,7 @@ class QuizService:
                     "CORRECT_CONCEPT: [Clear 1-2 sentence statement of the correct concept according to the video]"
                 )
 
-                for model_name in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash"]:
+                for model_name in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
                     try:
                         model = genai.GenerativeModel(model_name)
                         res = await asyncio.wait_for(

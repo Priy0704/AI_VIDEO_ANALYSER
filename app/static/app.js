@@ -333,7 +333,7 @@ function uploadVideoFile(file) {
             try {
                 const err = JSON.parse(xhr.responseText);
                 errorMsg = err.detail || JSON.stringify(err);
-            } catch {}
+            } catch { }
             alert(errorMsg);
             removeActiveTransfer(transferId);
         }
@@ -384,7 +384,7 @@ async function importFromUrl() {
             try {
                 const err = await res.json();
                 errorMsg = err.detail || JSON.stringify(err);
-            } catch {}
+            } catch { }
             alert(`Fetch failed: ${errorMsg}`);
             removeActiveTransfer(transferId);
             return;
@@ -699,8 +699,8 @@ async function selectVideo(videoId, forceRefresh = false) {
 
         // If in individual scope, update copilot focus subtitle, placeholder, and render its separate chat
         if (chatScope === 'current') {
-            const shortName = currentVideoData.filename.length > 28 
-                ? currentVideoData.filename.substring(0, 26) + '..' 
+            const shortName = currentVideoData.filename.length > 28
+                ? currentVideoData.filename.substring(0, 26) + '..'
                 : currentVideoData.filename;
             const subtitle = document.getElementById("copilotSubtitle");
             if (subtitle) {
@@ -715,8 +715,8 @@ async function selectVideo(videoId, forceRefresh = false) {
         // Update Tab Badges
         const segments = currentVideoData.segments || [];
         const rawTranscripts = currentVideoData.raw_transcripts || [];
-        const transcriptCount = rawTranscripts.length > 0 
-            ? rawTranscripts.length 
+        const transcriptCount = rawTranscripts.length > 0
+            ? rawTranscripts.length
             : segments.filter(s => s.transcript_text && s.transcript_text.trim().length > 0).length;
         const visualSegments = segments.filter(s => s.visual_description && s.visual_description.trim().length > 0);
 
@@ -728,6 +728,7 @@ async function selectVideo(videoId, forceRefresh = false) {
         updateLearningTabsVisibility(currentVideoData);
         if (currentVideoData.video_type !== 'observational') {
             loadPastQuizzes(videoId);
+            loadSelfTestPromptQuestion();
         }
 
         // Auto select tab
@@ -764,7 +765,7 @@ function switchTab(tabName) {
     if (btnVisuals) btnVisuals.classList.toggle("active", tabName === 'visuals');
     if (btnOverview) btnOverview.classList.toggle("active", tabName === 'overview');
     if (btnQuiz) btnQuiz.classList.toggle("active", tabName === 'quiz');
-    if (btnSelfTest) btnSelfTest.classList.toggle("active", tabName === 'selfTest');
+    if (btnSelfTest) btnSelfTest.classList.toggle("active", tabName === 'selfTest' || tabName === 'selftest');
 
     const paneTranscript = document.getElementById("paneTranscript");
     const paneVisuals = document.getElementById("paneVisuals");
@@ -1076,7 +1077,7 @@ function seekVideo(seconds) {
         player.currentTime = targetTime;
     } catch (e) {
         player.addEventListener('loadedmetadata', () => {
-            try { player.currentTime = targetTime; } catch {}
+            try { player.currentTime = targetTime; } catch { }
         }, { once: true });
     }
 
@@ -1499,13 +1500,13 @@ function handleVideoSearchInput() {
             ${matches.length} matches found ${matches.length > 30 ? '(showing top 30)' : ''}:
         </div>
         ${topMatches.map(m => {
-            const escaped = escapeHtml(m.snippet);
-            const regex = new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-            const highlighted = escaped.replace(
-                regex,
-                '<mark style="background: rgba(56, 189, 248, 0.35); color: #fff; border-radius: 2px; padding: 0 2px;">$1</mark>'
-            );
-            return `
+        const escaped = escapeHtml(m.snippet);
+        const regex = new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+        const highlighted = escaped.replace(
+            regex,
+            '<mark style="background: rgba(56, 189, 248, 0.35); color: #fff; border-radius: 2px; padding: 0 2px;">$1</mark>'
+        );
+        return `
                 <div class="scene-card" style="padding: 0.55rem; cursor: pointer;" onclick="seekVideo(${m.timestamp})">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
                         <button class="pill-time" onclick="event.stopPropagation(); seekVideo(${m.timestamp});">
@@ -1520,7 +1521,7 @@ function handleVideoSearchInput() {
                     </p>
                 </div>
             `;
-        }).join("")}
+    }).join("")}
     `;
 }
 
@@ -1638,16 +1639,13 @@ function setChatScope(scope) {
         }
         if (suggestionsBar) {
             suggestionsBar.innerHTML = `
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Trace persons across all cameras')">✦ Trace persons across cameras</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Total person count across all videos')">✦ Person count across videos</button>
                 <button class="suggestion-chip" onclick="sendQuickPrompt('Summarize key activities across all videos')">✦ Summarize all videos</button>
-                <button class="suggestion-chip" onclick="sendQuickPrompt('Find any suspicious activity')">✦ Suspicious activity</button>
-            `;
+                `;
         }
     } else {
         if (currentVideoData) {
-            const shortName = currentVideoData.filename.length > 28 
-                ? currentVideoData.filename.substring(0, 26) + '..' 
+            const shortName = currentVideoData.filename.length > 28
+                ? currentVideoData.filename.substring(0, 26) + '..'
                 : currentVideoData.filename;
             if (input) input.placeholder = `Ask anything about ${shortName}...`;
             if (subtitle) {
@@ -1674,6 +1672,9 @@ function setChatScope(scope) {
 }
 
 async function jumpToVideoAndTimestamp(videoId, seconds, autoplay = true) {
+    if (typeof closeContextModal === "function") {
+        closeContextModal();
+    }
     const sec = Math.max(0, parseFloat(seconds) || 0);
     const player = document.getElementById("videoPlayer");
     if (!player) return;
@@ -1688,6 +1689,7 @@ async function jumpToVideoAndTimestamp(videoId, seconds, autoplay = true) {
                 const p = player.play();
                 if (p !== undefined) p.catch(err => console.debug("Autoplay defer:", err));
             }
+            player.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };
 
         if (player.readyState >= 1) {
@@ -1702,6 +1704,7 @@ async function jumpToVideoAndTimestamp(videoId, seconds, autoplay = true) {
             const p = player.play();
             if (p !== undefined) p.catch(err => console.debug("Autoplay defer:", err));
         }
+        player.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 }
 
@@ -1889,8 +1892,8 @@ async function sendChatMessage() {
     try {
         const isSingle = (chatScope === 'current' && currentVideoId);
         const endpoint = isSingle ? `/api/v1/videos/${currentVideoId}/chat` : `/api/v1/chat`;
-        const activeSessionId = isSingle 
-            ? (chatStorage.videos[currentVideoId]?.sessionId || null) 
+        const activeSessionId = isSingle
+            ? (chatStorage.videos[currentVideoId]?.sessionId || null)
             : chatStorage.all.sessionId;
 
         const payload = isSingle
@@ -1929,29 +1932,54 @@ async function sendChatMessage() {
 
         const confPct = Math.round((data.confidence_score || 0) * 100);
         let confColor = confPct >= 75 ? "#34d399" : confPct >= 50 ? "#f59e0b" : "#ef4444";
+        let confLevel = data.confidence_level || (confPct >= 75 ? "High" : confPct >= 50 ? "Medium" : "Low");
 
         let citationsHtml = "";
         if (data.citations && data.citations.length > 0) {
+            // Deduplicate citations by (video_filename || video_id, timestamp_formatted)
+            const uniqueCitations = [];
+            const seenKeys = new Set();
+            for (const c of data.citations) {
+                const key = `${c.video_filename || c.video_id || ''}_${c.timestamp_formatted || c.start_time}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    uniqueCitations.push(c);
+                }
+            }
+
             citationsHtml = `
                 <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
-                    <span style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Evidence:</span>
-                    ${data.citations.map(c => {
-                        const vName = c.video_filename ? (c.video_filename.length > 16 ? c.video_filename.substring(0, 14) + '..' : c.video_filename) : '';
-                        const vBadge = vName ? `<span class="citation-tag-video"><i class="fa-solid fa-film"></i> ${escapeHtml(vName)}</span>` : '';
-                        return `
+                    <span style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Timestamps:</span>
+                    ${uniqueCitations.slice(0, 4).map(c => {
+                const vName = c.video_filename ? (c.video_filename.length > 16 ? c.video_filename.substring(0, 14) + '..' : c.video_filename) : '';
+                const vBadge = vName ? `<span class="citation-tag-video"><i class="fa-solid fa-film"></i> ${escapeHtml(vName)}</span>` : '';
+                return `
                             <button class="citation-tag" onclick="jumpToVideoAndTimestamp('${c.video_id || ''}', ${c.start_time})" title="${escapeHtml(c.snippet || '')} (${escapeHtml(c.video_filename || '')})">
                                 ${vBadge}
                                 <i class="fa-solid fa-play" style="font-size: 0.5rem;"></i> ${c.timestamp_formatted}
                             </button>
                         `;
-                    }).join("")}
+            }).join("")}
                 </div>
             `;
         }
 
-        const formattedAnswer = makeTimestampsClickable(escapeHtml(data.answer), data.citations || []);
+        // Clean raw section headers from answer body for direct grounded answer output
+        let cleanText = (data.answer || "").trim();
+        cleanText = cleanText.replace(/^(?:✅ Found|⚠️ Uncertain|❌ Not found)\s*/i, '');
+        cleanText = cleanText.replace(/^(?:Answer|ANSWER):\s*/i, '');
+        if (cleanText.includes("\nEvidence:\n")) cleanText = cleanText.split("\nEvidence:\n")[0];
+        else if (cleanText.includes("Evidence:\n")) cleanText = cleanText.split("Evidence:\n")[0];
+        if (cleanText.includes("\nConfidence:\n")) cleanText = cleanText.split("\nConfidence:\n")[0];
+        if (cleanText.includes("\nReason:\n")) cleanText = cleanText.split("\nReason:\n")[0];
+        if (cleanText.includes("\nTimestamp:\n")) cleanText = cleanText.split("\nTimestamp:\n")[0];
+        if (cleanText.includes("Timestamps:\n")) cleanText = cleanText.split("Timestamps:\n")[0];
+        if (cleanText.includes("Timestamp:\n")) cleanText = cleanText.split("Timestamp:\n")[0];
+        cleanText = cleanText.replace(/KEY POINTS:\s*/gi, '').trim();
+
+        const formattedAnswer = makeTimestampsClickable(escapeHtml(cleanText), data.citations || []);
         const msgId = `asst-msg-${Date.now()}`;
-        const videosTag = (data.videos_analyzed && data.videos_analyzed.length > 1) 
+        const videosTag = (data.videos_analyzed && data.videos_analyzed.length > 1)
             ? `<span style="font-size: 0.68rem; color: #38bdf8; margin-left: 0.4rem;"><i class="fa-solid fa-layer-group"></i> ${data.videos_analyzed.length} Videos</span>`
             : '';
 
@@ -2114,19 +2142,24 @@ function updateVideoTypeBadge(video) {
 function updateLearningTabsVisibility(video) {
     const tabQuiz = document.getElementById("tabBtnQuiz");
     const tabSelfTest = document.getElementById("tabBtnSelfTest");
-    if (!tabQuiz || !tabSelfTest) return;
+    const mTabQuiz = document.getElementById("mTabQuiz");
+    const mTabSelfTest = document.getElementById("mTabSelfTest");
 
     const isObservational = (video && video.video_type === 'observational');
     if (isObservational) {
-        tabQuiz.style.display = "none";
-        tabSelfTest.style.display = "none";
+        if (tabQuiz) tabQuiz.style.display = "none";
+        if (tabSelfTest) tabSelfTest.style.display = "none";
+        if (mTabQuiz) mTabQuiz.style.display = "none";
+        if (mTabSelfTest) mTabSelfTest.style.display = "none";
         // If user was on quiz or self-test pane, switch away
         if (currentActiveTab === 'quiz' || currentActiveTab === 'selfTest') {
             switchTab('transcript');
         }
     } else {
-        tabQuiz.style.display = "inline-flex";
-        tabSelfTest.style.display = "inline-flex";
+        if (tabQuiz) tabQuiz.style.display = "inline-flex";
+        if (tabSelfTest) tabSelfTest.style.display = "inline-flex";
+        if (mTabQuiz) mTabQuiz.style.display = "inline-flex";
+        if (mTabSelfTest) mTabSelfTest.style.display = "inline-flex";
     }
 }
 
@@ -2154,24 +2187,70 @@ async function loadPastQuizzes(videoId) {
         }
 
         section.style.display = "block";
-        list.innerHTML = quizzes.map(q => `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 0.4rem 0.6rem; border-radius: var(--radius-xs);">
-                <div>
-                    <span style="font-weight: 600; color: #f1f5f9; font-size: 0.76rem;">${escapeHtml(q.title || 'Knowledge Assessment')}</span>
-                    <span style="font-size: 0.68rem; color: var(--text-muted); margin-left: 0.5rem;">(${q.total_questions} questions · ${q.difficulty} · ${q.question_type})</span>
+        list.innerHTML = quizzes.map(q => {
+            let scoreBadgeHtml = '';
+            if (q.latest_score !== null && q.latest_score !== undefined) {
+                const maxS = q.latest_max_score || q.total_questions;
+                const pct = Math.round(q.latest_percentage || ((q.latest_score / maxS) * 100));
+                let color = pct >= 75 ? '#34d399' : pct >= 50 ? '#f59e0b' : '#f87171';
+                scoreBadgeHtml = `
+                    <span style="font-size: 0.68rem; font-weight: 700; color: ${color}; background: rgba(255,255,255,0.05); border: 1px solid ${color}40; padding: 0.15rem 0.45rem; border-radius: var(--radius-xs); display: inline-flex; align-items: center; gap: 0.3rem;">
+                        <i class="fa-solid fa-trophy" style="font-size: 0.65rem;"></i> Score: ${q.latest_score}/${maxS} (${pct}%)
+                    </span>
+                `;
+            } else {
+                scoreBadgeHtml = `<span style="font-size: 0.68rem; color: var(--text-dark);">(Not attempted yet)</span>`;
+            }
+
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: var(--radius-xs); gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem; min-width: 250px;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <span class="quiz-title-link" onclick="loadAndStartQuiz('${q.id}')" style="cursor: pointer; font-weight: 700; color: #f8fafc; font-size: 0.82rem;" title="Click to start taking this quiz">
+                                <i class="fa-solid fa-graduation-cap" style="color: #818cf8; font-size: 0.8rem; margin-right: 0.25rem;"></i>
+                                ${escapeHtml(q.title || 'Knowledge Assessment')}
+                            </span>
+                            ${scoreBadgeHtml}
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">
+                            ${q.total_questions} questions · ${q.difficulty} · ${q.question_type}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.4rem; align-items: center; flex-shrink: 0;">
+                        <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="downloadQuestionPaperPdf('${q.id}')" title="Download Clean Question Paper PDF">
+                            <i class="fa-solid fa-file-lines"></i> Questions PDF
+                        </button>
+                        <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="downloadAnswerKeyPdf('${q.id}')" title="Download Questions & Answer Key PDF">
+                            <i class="fa-solid fa-file-pdf"></i> Q&amp;A PDF
+                        </button>
+                        <button class="filter-pill btn-delete-quiz" style="font-size: 0.68rem; padding: 0.2rem 0.5rem; color: #f87171;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 0.4rem;">
-                    <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="loadAndStartQuiz('${q.id}')">
-                        Take Quiz
-                    </button>
-                    <button class="filter-pill" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="downloadQuestionPaperPdf('${q.id}')" title="Download Question Paper PDF">
-                        <i class="fa-solid fa-file-pdf"></i>
-                    </button>
-                </div>
-            </div>
-        `).join("");
+            `;
+        }).join("");
     } catch (e) {
         console.error("Error loading past quizzes:", e);
+    }
+}
+
+async function deleteQuiz(quizId) {
+    if (!quizId) return;
+    if (!confirm("Are you sure you want to delete this quiz?")) return;
+
+    try {
+        const res = await fetch(`/api/v1/quizzes/${quizId}`, { method: "DELETE" });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Failed to delete quiz.");
+        }
+        if (currentVideoId) {
+            loadPastQuizzes(currentVideoId);
+        }
+    } catch (e) {
+        console.error("Error deleting quiz:", e);
+        alert(e.message || "Could not delete quiz.");
     }
 }
 
@@ -2254,6 +2333,27 @@ function startQuizTaking(quizData) {
     renderQuizQuestion(0);
 }
 
+function cleanQuestionText(qText, topic) {
+    if (!qText) return `What primary concept or capability is demonstrated regarding ${topic || 'this video'}?`;
+    let q = qText;
+    q = q.replace(/according to the video (?:at [^,\.\?\n]+)?/gi, '');
+    q = q.replace(/highlighted in the video (?:at [^,\.\?\n]+)?/gi, '');
+    q = q.replace(/based on the video (?:at [^,\.\?\n]+)?/gi, '');
+    q = q.replace(/(?:at|in|between|during)?\s*\b\d{1,2}:\d{2}\s*(?:–|-|to)\s*\d{1,2}:\d{2}\b/gi, '');
+    q = q.replace(/the footage is unrelated to [^\.\?\n]+/gi, 'the video presents core concepts');
+    q = q.replace(/\s+/g, ' ').trim();
+    if (q.startsWith(',') || q.startsWith(':') || q.startsWith('-')) {
+        q = q.substring(1).trim();
+    }
+    if (!q || q.length < 10 || q.toLowerCase().startsWith('what key information is') || q.toLowerCase().startsWith('what key concept is')) {
+        q = `What primary concept or capability is demonstrated regarding ${topic || 'this video'}?`;
+    }
+    if (!q.endsWith('?') && !q.endsWith('.')) {
+        q += '?';
+    }
+    return q;
+}
+
 function renderQuizQuestion(index) {
     if (!activeQuestions || index < 0 || index >= activeQuestions.length) return;
     currentQuestionIndex = index;
@@ -2273,7 +2373,7 @@ function renderQuizQuestion(index) {
 
     // Question Text
     const qText = document.getElementById("quizQuestionText");
-    if (qText) qText.innerText = q.question_text;
+    if (qText) qText.innerText = cleanQuestionText(q.question || q.question_text, q.topic);
 
     // Options or Text Area
     const container = document.getElementById("quizOptionsContainer");
@@ -2298,20 +2398,37 @@ function renderQuizQuestion(index) {
         // MCQ or True/False
         let options = q.options;
         if (typeof options === "string") {
-            try { options = JSON.parse(options); } catch { options = {}; }
+            try { options = JSON.parse(options); } catch { options = []; }
         }
-        if (!options || typeof options !== "object") options = {};
 
-        const optionKeys = Object.keys(options).sort();
-        const html = optionKeys.map(k => {
-            const isSelected = (userAns === k);
-            return `
-                <div class="quiz-option-item ${isSelected ? 'selected' : ''}" onclick="selectQuizOption('${q.id}', '${escapeHtml(k)}')">
-                    <span class="quiz-option-indicator">${escapeHtml(k)}</span>
-                    <div class="quiz-option-text">${escapeHtml(options[k])}</div>
-                </div>
-            `;
-        }).join("");
+        let html = "";
+        if (Array.isArray(options)) {
+            html = options.map((optText, idx) => {
+                const letter = String.fromCharCode(65 + idx); // A, B, C, D
+                const isSelected = (userAns === optText || userAns === letter || userAns === String(idx));
+                return `
+                    <div class="quiz-option-item ${isSelected ? 'selected' : ''}" onclick="selectQuizOption('${q.id}', '${escapeHtml(optText)}')">
+                        <span class="quiz-option-indicator">${letter}</span>
+                        <div class="quiz-option-text">${escapeHtml(optText)}</div>
+                        <i class="fa-regular ${isSelected ? 'fa-circle-dot' : 'fa-circle'}" style="margin-left: auto; color: ${isSelected ? '#38bdf8' : 'var(--text-dark)'};"></i>
+                    </div>
+                `;
+            }).join("");
+        } else if (options && typeof options === "object") {
+            const optionKeys = Object.keys(options).sort();
+            html = optionKeys.map((k, idx) => {
+                const valText = options[k];
+                const displayKey = k.length === 1 ? k.toUpperCase() : String.fromCharCode(65 + idx);
+                const isSelected = (userAns === valText || userAns === k);
+                return `
+                    <div class="quiz-option-item ${isSelected ? 'selected' : ''}" onclick="selectQuizOption('${q.id}', '${escapeHtml(valText)}')">
+                        <span class="quiz-option-indicator">${escapeHtml(displayKey)}</span>
+                        <div class="quiz-option-text">${escapeHtml(valText)}</div>
+                        <i class="fa-regular ${isSelected ? 'fa-circle-dot' : 'fa-circle'}" style="margin-left: auto; color: ${isSelected ? '#38bdf8' : 'var(--text-dark)'};"></i>
+                    </div>
+                `;
+            }).join("");
+        }
         container.innerHTML = html;
     }
 
@@ -2474,7 +2591,7 @@ function renderQuizEvaluation(report) {
                     ${statusBadge}
                 </div>
                 <div style="font-size: 0.88rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.5rem;">
-                    ${escapeHtml(qr.question_text)}
+                    ${escapeHtml(qr.question || qr.question_text || '')}
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.75rem; margin-bottom: 0.5rem;">
                     <div style="background: rgba(255,255,255,0.02); padding: 0.35rem 0.5rem; border-radius: var(--radius-xs);">
@@ -2539,19 +2656,19 @@ function renderQuizEvaluation(report) {
             </div>
 
             <div class="quiz-export-actions">
-                <button class="btn-pdf-export btn-pdf-paper" onclick="downloadQuestionPaperPdf('${report.quiz_id}')">
-                    <i class="fa-solid fa-file-lines"></i>
-                    <span>Download Question Paper PDF</span>
+                <button class="filter-pill" onclick="resetQuizToConfig()" style="font-weight: 700; background: rgba(56, 189, 248, 0.15); border-color: var(--primary); color: #f8fafc;">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Quizzes
                 </button>
-                <button class="btn-pdf-export btn-pdf-report" onclick="downloadEvaluationReportPdf('${report.quiz_id}', '${report.id}')">
-                    <i class="fa-solid fa-file-pdf"></i>
-                    <span>Download Full Evaluation Report PDF</span>
+                <button class="btn-pdf-export btn-pdf-paper" onclick="downloadQuestionPaperPdf('${report.quiz_id}')" title="Download Printable Question Paper PDF">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Download Questions PDF</span>
+                </button>
+                <button class="btn-pdf-export btn-pdf-answers" onclick="downloadAnswerKeyPdf('${report.quiz_id}')" title="Download Questions + Answer Key PDF">
+                    <i class="fa-solid fa-key"></i>
+                    <span>Download Q&amp;A Answer Key PDF</span>
                 </button>
                 <button class="filter-pill" onclick="retakeCurrentQuiz()">
                     <i class="fa-solid fa-rotate-left"></i> Retake Quiz
-                </button>
-                <button class="filter-pill" onclick="resetQuizToConfig()">
-                    <i class="fa-solid fa-sliders"></i> New Quiz
                 </button>
             </div>
         </div>
@@ -2584,10 +2701,63 @@ function downloadQuestionPaperPdf(quizId) {
     window.open(url, "_blank");
 }
 
+function downloadAnswerKeyPdf(quizId) {
+    if (!quizId) return;
+    const url = `/api/v1/quizzes/${quizId}/pdf/answers`;
+    window.open(url, "_blank");
+}
+
 function downloadEvaluationReportPdf(quizId, attemptId) {
     if (!quizId || !attemptId) return;
     const url = `/api/v1/quizzes/${quizId}/attempts/${attemptId}/pdf/report`;
     window.open(url, "_blank");
+}
+
+// =========================================================================
+// Written Self-Test ("Test My Understanding") - AI Model Question Prompt
+// =========================================================================
+async function loadSelfTestPromptQuestion() {
+    if (!currentVideoId) {
+        return;
+    }
+
+    const questionTextEl = document.getElementById("selfTestModelQuestionText");
+    const questionInputEl = document.getElementById("selfTestQuestionInput");
+    const answerInputEl = document.getElementById("selfTestAnswerInput");
+    const resultCardEl = document.getElementById("selfTestResultCard");
+
+    // Clear previous user answer and hide evaluation card
+    if (answerInputEl) answerInputEl.value = "";
+    if (resultCardEl) resultCardEl.style.display = "none";
+
+    if (questionTextEl) {
+        questionTextEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: #fbbf24;"></i> <span style="color: var(--text-muted); font-size: 0.85rem;">Generating AI concept question from video...</span>`;
+    }
+
+    try {
+        const res = await fetch(`/api/v1/videos/${currentVideoId}/self-test/prompt`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Failed to generate AI question.");
+        }
+
+        const data = await res.json();
+        const qText = data.question || "Explain the core concepts presented in this video.";
+
+        let questionMarkup = `
+            <div style="font-size: 0.95rem; font-weight: 700; color: #f8fafc; line-height: 1.45;">
+                ${escapeHtml(qText)}
+            </div>
+        `;
+
+        if (questionTextEl) questionTextEl.innerHTML = questionMarkup;
+        if (questionInputEl) questionInputEl.value = qText;
+    } catch (e) {
+        console.error("Error loading self-test prompt question:", e);
+        const fallbackQ = "Explain the key concepts and evidence presented in this video in your own words.";
+        if (questionTextEl) questionTextEl.innerText = fallbackQ;
+        if (questionInputEl) questionInputEl.value = fallbackQ;
+    }
 }
 
 // =========================================================================
@@ -2649,19 +2819,19 @@ function renderSelfTestResult(res) {
 
     card.style.display = "block";
 
-    const score = res.rubric_score || 0;
+    const score = res.score ?? res.rubric_score ?? 0;
     let scoreColor = '#34d399';
-    let statusText = 'Mastered';
+    let statusText = res.status || 'Mastered';
 
-    if (score >= 8) {
+    if (score >= 8 || statusText.toLowerCase().includes('mastered')) {
         scoreColor = '#34d399';
         statusText = 'Mastered (Excellent Understanding)';
-    } else if (score >= 6) {
+    } else if (score >= 6 || statusText.toLowerCase().includes('good')) {
         scoreColor = '#38bdf8';
         statusText = 'Good Understanding';
-    } else if (score >= 4) {
+    } else if (score >= 4 || statusText.toLowerCase().includes('partial')) {
         scoreColor = '#f59e0b';
-        statusText = 'Partial Understanding';
+        statusText = 'Partial Understanding (Weak)';
     } else {
         scoreColor = '#f87171';
         statusText = 'Needs Review';
@@ -2680,21 +2850,25 @@ function renderSelfTestResult(res) {
         `;
     }
 
+    // Only show targeted video relearn button IF the answer is weak / incomplete (score < 8 or status is not Mastered)
     let relearnBtn = '';
-    if (res.timestamp_start !== null && res.timestamp_start !== undefined) {
-        const timeFormatted = formatSeconds(res.timestamp_start);
+    const tStart = res.relevant_timestamp_start ?? res.timestamp_start;
+    const tFmt = res.relevant_timestamp_formatted || (tStart !== null && tStart !== undefined ? formatSeconds(tStart) : '');
+    const isWeakAnswer = (score < 8) || (res.status && !res.status.toLowerCase().includes('mastered'));
+
+    if (isWeakAnswer && tStart !== null && tStart !== undefined) {
         relearnBtn = `
-            <div class="relearn-callout" style="margin-top: 0.75rem;">
-                <div class="relearn-callout-title">
-                    <i class="fa-solid fa-compass" style="color: #38bdf8;"></i>
-                    <span>Targeted Video Relearn Segment</span>
+            <div class="relearn-callout" style="margin-top: 0.75rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); padding: 0.75rem 0.9rem;">
+                <div class="relearn-callout-title" style="font-size: 0.82rem; font-weight: 700; color: #fbbf24; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.4rem;">
+                    <i class="fa-solid fa-graduation-cap" style="color: #fbbf24;"></i>
+                    <span>Weak / Incomplete Explanation – Target Re-learn</span>
                 </div>
-                <div style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.4rem;">
-                    Jump directly to the video segment where this concept is covered:
+                <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+                    Your explanation needs improvement. Watch the video lesson segment at <strong>${escapeHtml(tFmt)}</strong> to re-learn this concept:
                 </div>
-                <button class="btn-watch-relearn" onclick="seekAndPlayVideo(${res.timestamp_start})">
+                <button class="btn-watch-relearn" onclick="seekAndPlayVideo(${tStart})" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #ffffff; font-weight: 600; font-size: 0.78rem; padding: 0.35rem 0.85rem; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;">
                     <i class="fa-solid fa-play"></i>
-                    <span>Watch &amp; Learn Again at ${timeFormatted}</span>
+                    <span>Watch &amp; Learn Again at ${escapeHtml(tFmt)}</span>
                 </button>
             </div>
         `;
@@ -2747,13 +2921,278 @@ function clearSelfTest() {
 }
 
 function seekAndPlayVideo(seconds) {
+    if (typeof closeContextModal === "function") {
+        closeContextModal();
+    }
     if (currentVideoId) {
         jumpToVideoAndTimestamp(currentVideoId, seconds, true);
     } else {
         const player = document.getElementById("videoPlayer");
         if (player) {
             player.currentTime = Math.max(0, parseFloat(seconds) || 0);
-            player.play().catch(() => {});
+            player.play().catch(() => { });
+            player.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
+}
+
+// Workspace Layout View Switcher (De-cluttered Multi-Screen Workspace)
+function setWorkspaceViewMode(mode) {
+    const container = document.getElementById("mainContainer");
+    if (!container) return;
+
+    container.classList.remove("view-mode-grid", "view-mode-player", "view-mode-learning", "view-mode-chat");
+
+    const btnGrid = document.getElementById("viewModeBtnGrid");
+    const btnPlayer = document.getElementById("viewModeBtnPlayer");
+    const btnLearning = document.getElementById("viewModeBtnLearning");
+    const btnChat = document.getElementById("viewModeBtnChat");
+
+    if (btnGrid) btnGrid.classList.toggle("active", mode === 'grid');
+    if (btnPlayer) btnPlayer.classList.toggle("active", mode === 'player');
+    if (btnLearning) btnLearning.classList.toggle("active", mode === 'learning');
+    if (btnChat) btnChat.classList.toggle("active", mode === 'chat');
+
+    if (mode === 'player') {
+        container.classList.add("view-mode-player");
+    } else if (mode === 'learning') {
+        container.classList.add("view-mode-learning");
+        if (currentVideoData && currentVideoData.video_type !== 'observational') {
+            switchTab('quiz');
+        }
+    } else if (mode === 'chat') {
+        container.classList.add("view-mode-chat");
+    } else {
+        container.classList.add("view-mode-grid");
+    }
+}
+
+// =========================================================================
+// Left Panel Upload Section Collapse Toggle
+// =========================================================================
+function toggleUploadSection() {
+    const section = document.querySelector(".upload-section");
+    const icon = document.getElementById("uploadToggleIcon");
+    if (!section) return;
+
+    const isCollapsed = section.classList.toggle("collapsed");
+    if (icon) {
+        icon.className = isCollapsed ? "fa-solid fa-chevron-down" : "fa-solid fa-chevron-up";
+    }
+}
+
+// =========================================================================
+// Full Context Inspection Modal Popup Screen
+// =========================================================================
+let activeModalTab = 'summary';
+
+function openContextModal(tabName) {
+    const modal = document.getElementById("contextModal");
+    if (!modal) return;
+
+    if (!currentVideoData) {
+        alert("Please select a video from the library first.");
+        return;
+    }
+
+    modal.style.display = "flex";
+
+    // Header info
+    const titleElem = document.getElementById("modalVideoTitle");
+    const subElem = document.getElementById("modalVideoSub");
+    if (titleElem) titleElem.innerText = currentVideoData.filename;
+    if (subElem) subElem.innerText = `Type: ${currentVideoData.video_type_label || 'Observational / General'} · Duration: ${formatSeconds(currentVideoData.duration_seconds || 0)}`;
+
+    // Badges
+    const rawTranscripts = currentVideoData.raw_transcripts || [];
+    const segments = currentVideoData.segments || [];
+    const transcriptCount = rawTranscripts.length > 0 ? rawTranscripts.length : segments.filter(s => s.transcript_text && s.transcript_text.trim().length > 0).length;
+    const visualCount = segments.filter(s => s.visual_description && s.visual_description.trim().length > 0).length;
+
+    const tBadge = document.getElementById("modalTranscriptBadge");
+    const vBadge = document.getElementById("modalVisualsBadge");
+    if (tBadge) tBadge.innerText = transcriptCount;
+    if (vBadge) vBadge.innerText = visualCount;
+
+    let targetTab = tabName || (currentActiveTab === 'transcript' || currentActiveTab === 'visuals' ? currentActiveTab : 'summary');
+    if (targetTab === 'overview') targetTab = 'summary';
+    switchModalTab(targetTab);
+}
+
+function closeContextModal() {
+    const modal = document.getElementById("contextModal");
+    if (modal) modal.style.display = "none";
+
+    // Restore moved elements to main pane containers
+    const quizContainer = document.getElementById("quizContainer");
+    const paneQuiz = document.getElementById("paneQuiz");
+    if (quizContainer && paneQuiz && quizContainer.parentElement !== paneQuiz) {
+        paneQuiz.appendChild(quizContainer);
+    }
+    const selfTestWrap = document.getElementById("selfTestWrap");
+    const paneSelfTest = document.getElementById("paneSelfTest");
+    if (selfTestWrap && paneSelfTest && selfTestWrap.parentElement !== paneSelfTest) {
+        paneSelfTest.appendChild(selfTestWrap);
+    }
+}
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+        closeContextModal();
+    }
+});
+
+function switchModalTab(tabName) {
+    activeModalTab = tabName;
+
+    const btnSummary = document.getElementById("mTabSummary");
+    const btnTranscript = document.getElementById("mTabTranscript");
+    const btnVisuals = document.getElementById("mTabVisuals");
+    const btnQuiz = document.getElementById("mTabQuiz");
+    const btnSelfTest = document.getElementById("mTabSelfTest");
+
+    if (btnSummary) btnSummary.classList.toggle("active", tabName === 'summary');
+    if (btnTranscript) btnTranscript.classList.toggle("active", tabName === 'transcript');
+    if (btnVisuals) btnVisuals.classList.toggle("active", tabName === 'visuals');
+    if (btnQuiz) btnQuiz.classList.toggle("active", tabName === 'quiz');
+    if (btnSelfTest) btnSelfTest.classList.toggle("active", tabName === 'selfTest' || tabName === 'selftest');
+
+    renderModalBody();
+}
+
+function renderModalBody() {
+    const body = document.getElementById("modalBody");
+    if (!body || !currentVideoData) return;
+
+    // Restore moved elements if tab switched away from quiz / selftest
+    const quizContainer = document.getElementById("quizContainer");
+    const paneQuiz = document.getElementById("paneQuiz");
+    if (quizContainer && paneQuiz && activeModalTab !== 'quiz' && quizContainer.parentElement !== paneQuiz) {
+        paneQuiz.appendChild(quizContainer);
+    }
+    const selfTestWrap = document.getElementById("selfTestWrap");
+    const paneSelfTest = document.getElementById("paneSelfTest");
+    if (selfTestWrap && paneSelfTest && (activeModalTab !== 'selftest' && activeModalTab !== 'selfTest') && selfTestWrap.parentElement !== paneSelfTest) {
+        paneSelfTest.appendChild(selfTestWrap);
+    }
+
+    if (activeModalTab === 'quiz') {
+        if (quizContainer) {
+            body.innerHTML = "";
+            body.appendChild(quizContainer);
+        }
+        return;
+    }
+
+    if (activeModalTab === 'selftest' || activeModalTab === 'selfTest') {
+        if (selfTestWrap) {
+            body.innerHTML = "";
+            body.appendChild(selfTestWrap);
+            const qVal = document.getElementById("selfTestQuestionInput")?.value;
+            if (!qVal || qVal.trim() === "" || qVal.includes("Loading AI concept")) {
+                loadSelfTestPromptQuestion();
+            }
+        }
+        return;
+    }
+
+    const query = (document.getElementById("modalSearchInput")?.value || "").toLowerCase().trim();
+    const segments = currentVideoData.segments || [];
+    const rawTranscripts = currentVideoData.raw_transcripts || [];
+
+    if (activeModalTab === 'summary') {
+        const summaryText = currentVideoData.summary || "No executive summary generated for this video.";
+        body.innerHTML = `
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem;">
+                <div style="font-size: 0.82rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-file-lines"></i> Executive Video Overview
+                </div>
+                <div style="font-size: 0.95rem; color: #f8fafc; line-height: 1.65; white-space: pre-wrap;">${escapeHtml(summaryText)}</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-top: 0.5rem;">
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 0.85rem; border-radius: var(--radius-sm);">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Video Type</div>
+                    <div style="font-size: 0.92rem; font-weight: 700; color: #34d399; margin-top: 0.2rem;">${escapeHtml(currentVideoData.video_type_label || 'Observational')}</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 0.85rem; border-radius: var(--radius-sm);">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Duration</div>
+                    <div style="font-size: 0.92rem; font-weight: 700; color: #38bdf8; margin-top: 0.2rem;">${formatSeconds(currentVideoData.duration_seconds || 0)}</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 0.85rem; border-radius: var(--radius-sm);">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Classification Reason</div>
+                    <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 0.2rem;">${escapeHtml(currentVideoData.video_type_reason || 'Classified by perception engine.')}</div>
+                </div>
+            </div>
+        `;
+    } else if (activeModalTab === 'transcript') {
+        let items = [];
+        if (rawTranscripts.length > 0) {
+            items = rawTranscripts;
+        } else {
+            items = segments.filter(s => s.transcript_text && s.transcript_text.trim().length > 0);
+        }
+
+        if (query) {
+            items = items.filter(item => {
+                const txt = (item.text || item.transcript_text || "").toLowerCase();
+                return txt.includes(query);
+            });
+        }
+
+        if (items.length === 0) {
+            body.innerHTML = `<p style="color: var(--text-dark); text-align: center; padding: 2rem;">No speech or audio transcript matching query.</p>`;
+            return;
+        }
+
+        body.innerHTML = items.map((item, idx) => {
+            const st = item.start !== undefined ? item.start : item.start_time;
+            const et = item.end !== undefined ? item.end : item.end_time;
+            const txt = item.text || item.transcript_text || "";
+            const timeFmt = `${formatSeconds(st)} - ${formatSeconds(et)}`;
+
+            return `
+                <div style="display: flex; gap: 0.85rem; align-items: flex-start; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); padding: 0.75rem 1rem; border-radius: var(--radius-sm);">
+                    <button class="ai-time-jump" onclick="seekAndPlayVideo(${st}); closeContextModal();" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
+                        <i class="fa-solid fa-play"></i> ${timeFmt}
+                    </button>
+                    <div style="flex: 1; font-size: 0.88rem; color: #f1f5f9; line-height: 1.5;">${escapeHtml(txt)}</div>
+                </div>
+            `;
+        }).join("");
+    } else if (activeModalTab === 'visuals') {
+        let items = segments.filter(s => (s.visual_description && s.visual_description.trim().length > 0) || (s.ocr_text && s.ocr_text.trim().length > 0));
+
+        if (query) {
+            items = items.filter(s => {
+                const text = `${s.visual_description || ''} ${s.ocr_text || ''}`.toLowerCase();
+                return text.includes(query);
+            });
+        }
+
+        if (items.length === 0) {
+            body.innerHTML = `<p style="color: var(--text-dark); text-align: center; padding: 2rem;">No visual scene logs matching query.</p>`;
+            return;
+        }
+
+        body.innerHTML = items.map((seg, idx) => {
+            const timeFmt = `${formatSeconds(seg.start_time)} - ${formatSeconds(seg.end_time)}`;
+            return `
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); padding: 0.85rem 1rem; border-radius: var(--radius-sm);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <button class="ai-time-jump" onclick="seekAndPlayVideo(${seg.start_time}); closeContextModal();" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
+                            <i class="fa-solid fa-camera"></i> Scene ${idx + 1} (${timeFmt})
+                        </button>
+                        ${seg.ocr_text ? `<span class="modality-pill modality-pill-ocr"><i class="fa-solid fa-font"></i> OCR Detected</span>` : ''}
+                    </div>
+                    ${seg.visual_description ? `<div style="font-size: 0.86rem; color: #f1f5f9; line-height: 1.45;"><strong style="color: #38bdf8;">Visual Observation:</strong> ${escapeHtml(seg.visual_description)}</div>` : ''}
+                    ${seg.ocr_text ? `<div style="font-size: 0.82rem; color: #fbbf24; background: rgba(245, 158, 11, 0.1); padding: 0.4rem 0.65rem; border-radius: 4px;"><strong style="color: #f59e0b;">On-Screen OCR:</strong> ${escapeHtml(seg.ocr_text)}</div>` : ''}
+                </div>
+            `;
+        }).join("");
+    }
+}
+
+function filterModalContext() {
+    renderModalBody();
 }

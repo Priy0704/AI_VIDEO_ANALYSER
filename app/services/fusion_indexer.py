@@ -161,7 +161,7 @@ class FusionIndexer:
 
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             candidate_models = []
-            for m in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+            for m in [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
                 if m and m not in candidate_models:
                     candidate_models.append(m)
 

@@ -163,6 +163,156 @@ class PdfGenerator:
         return buffer
 
     @staticmethod
+    def generate_answer_key_paper(quiz: Quiz, video: Video) -> io.BytesIO:
+        """Generate a complete Question Paper PDF with Answer Key and Explanations."""
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=40,
+            leftMargin=40,
+            topMargin=40,
+            bottomMargin=40
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'ExamTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=18,
+            leading=22,
+            textColor=colors.HexColor("#0f172a"),
+            spaceAfter=6
+        )
+        subtitle_style = ParagraphStyle(
+            'ExamSubtitle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#475569")
+        )
+        instruction_style = ParagraphStyle(
+            'Instructions',
+            parent=styles['Normal'],
+            fontName='Helvetica-Oblique',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#64748b"),
+            spaceAfter=12
+        )
+        q_header_style = ParagraphStyle(
+            'QuestionHeader',
+            parent=styles['Heading3'],
+            fontName='Helvetica-Bold',
+            fontSize=11,
+            leading=15,
+            textColor=colors.HexColor("#0284c7"),
+            spaceBefore=10,
+            spaceAfter=4
+        )
+        q_text_style = ParagraphStyle(
+            'QuestionText',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#1e293b"),
+            spaceAfter=6
+        )
+        option_style = ParagraphStyle(
+            'OptionText',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9.5,
+            leading=13,
+            textColor=colors.HexColor("#334155")
+        )
+        correct_style = ParagraphStyle(
+            'CorrectText',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9.5,
+            leading=13,
+            textColor=colors.HexColor("#16a34a")
+        )
+        explanation_style = ParagraphStyle(
+            'ExpText',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#475569")
+        )
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8,
+            leading=11,
+            textColor=colors.HexColor("#94a3b8"),
+            alignment=1
+        )
+
+        story = []
+
+        # 1. Header Card
+        story.append(Paragraph(f"<b>{quiz.title or 'Knowledge Assessment Q&A Key'}</b>", title_style))
+        story.append(Paragraph(
+            f"<b>Video:</b> {video.filename} &nbsp;·&nbsp; <b>Difficulty:</b> {quiz.difficulty.upper()} &nbsp;·&nbsp; <b>Type:</b> {quiz.question_type.upper()}",
+            subtitle_style
+        ))
+        story.append(Spacer(1, 8))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0284c7"), spaceAfter=10))
+
+        story.append(Paragraph(
+            "<b>Master Answer Key &amp; Video Explanations:</b> Contains correct answers, detailed reasoning, and video timestamp citations.",
+            instruction_style
+        ))
+        story.append(Spacer(1, 10))
+
+        # 2. Questions List
+        for idx, q in enumerate(quiz.questions, start=1):
+            q_block = []
+            type_label = (
+                "Multiple Choice" if q.question_type == "mcq"
+                else ("True / False" if q.question_type == "true_false" else "Short Answer")
+            )
+            time_tag = f" &nbsp;·&nbsp; [{q.relevant_timestamp_formatted}]" if q.relevant_timestamp_formatted else ""
+            q_block.append(Paragraph(f"Question {idx} of {quiz.total_questions} &nbsp;·&nbsp; [{type_label}]{time_tag} &nbsp;·&nbsp; Topic: {q.topic}", q_header_style))
+            q_block.append(Paragraph(q.question, q_text_style))
+
+            if q.question_type in ["mcq", "true_false"] and q.options:
+                letters = ["A", "B", "C", "D", "E"]
+                for o_idx, opt in enumerate(q.options):
+                    l = letters[o_idx] if o_idx < len(letters) else "-"
+                    is_correct_opt = (str(opt).strip().lower() == str(q.correct_answer).strip().lower()) or (str(l).lower() == str(q.correct_answer).strip().lower())
+                    if is_correct_opt:
+                        q_block.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>[{l}]</b> {opt} &nbsp;✔ (Correct Answer)", correct_style))
+                    else:
+                        q_block.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>[{l}]</b> {opt}", option_style))
+                    q_block.append(Spacer(1, 2))
+            else:
+                q_block.append(Paragraph(f"<b>Correct Answer:</b> {q.correct_answer}", correct_style))
+
+            if q.explanation:
+                q_block.append(Spacer(1, 2))
+                q_block.append(Paragraph(f"<b>Explanation:</b> {q.explanation}", explanation_style))
+
+            q_block.append(Spacer(1, 12))
+            story.append(KeepTogether(q_block))
+
+        # 3. Footer
+        story.append(Spacer(1, 20))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
+        story.append(Paragraph("VideoIntel AI Assessment Platform &nbsp;·&nbsp; Automated Knowledge Verification &amp; Answer Key", footer_style))
+
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+
+    @staticmethod
     def generate_evaluation_report(attempt: QuizAttempt, quiz: Quiz, video: Video) -> io.BytesIO:
         """Generate a complete Quiz & Evaluation Report PDF with score, topic breakdown, and timestamps."""
         buffer = io.BytesIO()

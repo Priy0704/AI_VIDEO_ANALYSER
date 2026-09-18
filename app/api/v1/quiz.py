@@ -17,7 +17,7 @@ from app.schemas.quiz import (
     SelfTestRequest,
     SelfTestResponse
 )
-from app.services.quiz_service import QuizService
+from app.services.quiz_service import QuizService, sanitize_question_text
 from app.services.pdf_generator import PdfGenerator
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ async def generate_quiz_for_video(
                 id=q.id,
                 quiz_id=q.quiz_id,
                 order_num=q.order_num,
-                question=q.question,
+                question=sanitize_question_text(q.question, q.topic),
                 question_type=q.question_type,
                 options=q.options,
                 topic=q.topic,
@@ -97,6 +97,15 @@ async def list_quizzes_for_video(
 
     results = []
     for q in quizzes:
+        l_score = None
+        l_max = None
+        l_pct = None
+        if q.attempts and len(q.attempts) > 0:
+            latest_attempt = sorted(q.attempts, key=lambda a: a.created_at)[-1]
+            l_score = latest_attempt.total_score
+            l_max = latest_attempt.max_score or q.total_questions
+            l_pct = latest_attempt.percentage
+
         results.append(
             QuizResponse(
                 id=q.id,
@@ -106,12 +115,15 @@ async def list_quizzes_for_video(
                 question_type=q.question_type,
                 total_questions=q.total_questions,
                 created_at=q.created_at,
+                latest_score=l_score,
+                latest_max_score=l_max,
+                latest_percentage=l_pct,
                 questions=[
                     QuizQuestionResponse(
                         id=qq.id,
                         quiz_id=qq.quiz_id,
                         order_num=qq.order_num,
-                        question=qq.question,
+                        question=sanitize_question_text(qq.question, qq.topic),
                         question_type=qq.question_type,
                         options=qq.options,
                         topic=qq.topic,
@@ -124,6 +136,24 @@ async def list_quizzes_for_video(
             )
         )
     return results
+
+
+@router.delete(
+    "/quizzes/{quiz_id}",
+    summary="Delete a generated quiz"
+)
+async def delete_quiz(
+    quiz_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a quiz and its questions/attempts."""
+    quiz = await db.get(Quiz, quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    await db.delete(quiz)
+    await db.commit()
+    return {"message": "Quiz deleted successfully", "id": quiz_id}
 
 
 @router.get(
@@ -153,7 +183,7 @@ async def get_quiz(
                 id=q.id,
                 quiz_id=q.quiz_id,
                 order_num=q.order_num,
-                question=q.question,
+                question=sanitize_question_text(q.question, q.topic),
                 question_type=q.question_type,
                 options=q.options,
                 topic=q.topic,
@@ -225,6 +255,22 @@ async def get_quiz_attempt(
     )
 
 
+@router.get(
+    "/videos/{video_id}/self-test/prompt",
+    summary="Get an AI model-generated concept prompt question for 'Test My Understanding'"
+)
+async def get_self_test_prompt(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Generates an AI question for the user to test their understanding of the video."""
+    video = await db.get(Video, video_id)
+    if not video:
+        raise VideoNotFoundError(video_id)
+
+    return await quiz_service.generate_self_test_prompt(db=db, video=video)
+
+
 @router.post(
     "/videos/{video_id}/self-test",
     response_model=SelfTestResponse,
@@ -270,6 +316,33 @@ async def download_question_paper_pdf(
 
     safe_title = "".join(c for c in (quiz.title or "quiz") if c.isalnum() or c in (' ', '_', '-')).strip()
     filename = f"{safe_title}_Question_Paper.pdf"
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get(
+    "/quizzes/{quiz_id}/pdf/answers",
+    summary="Download Questions + Master Answer Key PDF"
+)
+async def download_answer_key_pdf(
+    quiz_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Download Questions with Master Answer Key & Explanations PDF."""
+    stmt = select(Quiz).where(Quiz.id == quiz_id)
+    quiz = (await db.execute(stmt)).scalar_one_or_none()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    video = await db.get(Video, quiz.video_id)
+    pdf_buffer = PdfGenerator.generate_answer_key_paper(quiz, video)
+
+    safe_title = "".join(c for c in (quiz.title or "quiz") if c.isalnum() or c in (' ', '_', '-')).strip()
+    filename = f"{safe_title}_Answer_Key.pdf"
 
     return StreamingResponse(
         pdf_buffer,

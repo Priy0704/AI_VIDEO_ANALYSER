@@ -33,6 +33,9 @@ class QuizResponse(BaseModel):
     question_type: str
     total_questions: int
     created_at: datetime
+    latest_score: Optional[float] = None
+    latest_max_score: Optional[float] = None
+    latest_percentage: Optional[float] = None
     questions: List[QuizQuestionResponse] = []
 
 

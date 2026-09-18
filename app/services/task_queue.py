@@ -139,7 +139,8 @@ class VideoTaskQueue:
                 transcripts=[t.text for t in transcripts],
                 visual_descriptions=[v.description for v in visual_observations],
                 ocr_texts=[getattr(v, "ocr_text", "") for v in visual_observations],
-                summary=video.summary
+                summary=video.summary,
+                duration_seconds=meta.duration_seconds
             )
             video.video_type = classification.video_type
             video.video_type_label = classification.label
