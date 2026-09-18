@@ -167,8 +167,9 @@ class ChatService:
             if session:
                 return session
 
-        new_session = ChatSession(video_id=video_id)
+        new_session = ChatSession(id=session_id, video_id=video_id) if session_id else ChatSession(video_id=video_id)
         db.add(new_session)
+        await db.flush()
         await db.commit()
         await db.refresh(new_session)
         return new_session
@@ -304,8 +305,7 @@ class ChatService:
             "say", "said", "tell", "told", "speak", "spoke", "mention", "mentioned",
             "question", "questions", "asked", "asking", "answer", "answers", "explain",
             "video", "videos", "clip", "clips", "footage", "section", "part", "give", "show",
-            "detail", "details", "youtube", "channel", "channels", "name", "names", "creator",
-            "creators", "author", "authors", "handle", "handles", "instructor", "teacher"
+            "detail", "details"
         }
         raw_keywords = [w for w in re.findall(r'\b[a-zA-Z0-9_.-]{2,}\b', q_lower) if w not in meta_words]
         query_keywords = set(raw_keywords)
@@ -547,12 +547,24 @@ class ChatService:
         for seg, score in scored_segments:
             all_evidence_items.extend(self.extract_evidence_items_from_segment(seg, video, relevance_score=score))
 
-        # Build full video overview text (Summary + Transcript timeline)
+        # Build full video overview text (Summary + Transcript timeline + Visual/OCR Highlights)
         full_video_overview = video.summary or ""
         if video.raw_transcripts and isinstance(video.raw_transcripts, list):
             raw_t_text = " ".join([t.get("text", "") for t in video.raw_transcripts if isinstance(t, dict) and t.get("text")])
             if raw_t_text.strip():
                 full_video_overview = (full_video_overview + f"\n\nFull Video Transcript Highlights:\n{raw_t_text[:1500]}").strip()
+
+        # Add Visual & On-Screen OCR highlights across retrieved segments
+        vis_ocr_notes = []
+        for seg, score in scored_segments:
+            if seg.ocr_text and seg.ocr_text.strip():
+                vis_ocr_notes.append(f"[{self.format_timestamp(seg.start_time)}] OCR: {seg.ocr_text.strip()}")
+            elif seg.visual_description:
+                text_m = re.search(r'(?:On-Screen Text & Names|Visible Text & Names|Visible Text|Names|OCR):\s*(.+)', seg.visual_description, re.IGNORECASE)
+                if text_m:
+                    vis_ocr_notes.append(f"[{self.format_timestamp(seg.start_time)}] On-Screen Text: {text_m.group(1).strip()}")
+        if vis_ocr_notes:
+            full_video_overview = (full_video_overview + f"\n\nOn-Screen Text & Visual Highlights:\n" + "\n".join(vis_ocr_notes[:10])).strip()
 
         # Check absence: only trigger early bailout if NO segments AND NO summary/transcript exist
         if not scored_segments and not full_video_overview and not is_summary_query and not is_concept_query and not is_sensitive_query:
@@ -1092,7 +1104,10 @@ class ChatService:
                 "3. GENERAL / CONCEPT QUESTIONS (e.g. 'What is Docker?', 'Explain X'): Provide the clear definition/explanation taught in the video using the summary and transcript context. Do NOT require an exact timestamp match.\n"
                 "4. TIMESTAMP QUESTIONS (e.g. 'What happened at 02:30?'): Focus specifically on what occurred around that moment (±15–20 seconds).\n"
                 "5. SUMMARY QUESTIONS: Provide a cohesive, structured overview of the main topics and takeaways from the entire video.\n"
-                "6. VISUAL QUESTIONS: Prioritize visual scene descriptions and OCR text.\n"
+                "6. VISUAL & ON-SCREEN TEXT QUESTIONS (e.g. channel names, titles, names, handles, logos, on-screen text):\n"
+                "   - Speakers often show YouTube channel pages, titles, website names, or subscriber counts on screen (e.g., 'Pumpkin Family', 'Lumo Toons') without pronouncing their full name out loud.\n"
+                "   - You MUST check the Visual Scene Descriptions and On-Screen OCR Text carefully for names, channel handles, titles, and metrics.\n"
+                "   - If an on-screen channel name or title is shown in visual descriptions/OCR (even if the speaker refers to it generally as 'an example channel'), report the exact on-screen channel name(s) (e.g. 'Pumpkin Family', 'Lumo Toons') clearly in your answer!\n"
                 "7. GROUNDING & ABSENCE: Never invent information unsupported by the video. If the requested information is genuinely absent from the video summary, transcript, OCR, and visuals, answer with 'No sufficient evidence was found in the uploaded videos.' with Low confidence.\n\n"
                 "RESPONSE FORMAT:\n"
                 "Provide a clear, direct, and well-grounded answer to the user's question adhering to the exact 4-part structure:\n\n"

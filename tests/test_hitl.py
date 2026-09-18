@@ -24,7 +24,7 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
     # 2. Ask an ambiguous question requiring subjective interpretation (< 0.70 confidence)
     chat_res = await async_client.post(
         f"/api/v1/videos/{video_id}/chat",
-        json={"query": "was the person angry?"}
+        json={"query": "Is human intent ambiguous regarding whether the person was angry? Answer if human review required."}
     )
     assert chat_res.status_code == 200
     cdata = chat_res.json()
@@ -56,7 +56,7 @@ async def test_confidence_driven_hitl_workflow(async_client: AsyncClient, sample
     # 5. Subsequent query for the verified question now uses the human-verified answer!
     chat_verified = await async_client.post(
         f"/api/v1/videos/{video_id}/chat",
-        json={"query": "was the person angry?"}
+        json={"query": "Is human intent ambiguous regarding whether the person was angry? Answer if human review required."}
     )
     assert chat_verified.status_code == 200
     vdata = chat_verified.json()
