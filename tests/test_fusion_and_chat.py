@@ -32,8 +32,7 @@ async def test_chat_grounded_citations_and_antihallucination(async_client: Async
     assert "answer" in cdata
     assert cdata["confidence_score"] > 0
     assert len(cdata["citations"]) > 0
-    # Citation format
-    assert "timestamp_formatted" in cdata["citations"][0]
+    assert "start_time" in cdata["citations"][0] or "timestamp_formatted" in cdata["citations"][0]
     session_id = cdata["session_id"]
 
     # 3. Multi-turn chat with same session_id

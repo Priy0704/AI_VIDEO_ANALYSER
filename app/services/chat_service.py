@@ -224,8 +224,22 @@ class ChatService:
             )
 
         # 3. Visual Scene
-        if segment.visual_description and len(segment.visual_description.strip()) > 1:
-            clean_vis = segment.visual_description.strip()
+        clean_vis = (segment.visual_description or "").strip()
+        if len(clean_vis) > 1:
+            items.append(
+                MultimodalEvidenceItem(
+                    video_id=v_id,
+                    video_name=v_name,
+                    timestamp_start=t_start,
+                    timestamp_end=t_end,
+                    timestamp_formatted=t_fmt,
+                    modality="Visual",
+                    content=clean_vis,
+                    relevance_score=relevance_score
+                )
+            )
+        else:
+            clean_vis = f"Video frame sequence during time window {t_fmt}."
             items.append(
                 MultimodalEvidenceItem(
                     video_id=v_id,
@@ -239,26 +253,26 @@ class ChatService:
                 )
             )
 
-            # 4. Action / Event detection (if movement or event described)
-            vis_lower = clean_vis.lower()
-            action_keywords = ["enters", "enter", "exits", "exit", "leaves", "leave", "walks", "walk", "running", "ran", "arrives", "steals", "theft", "punches", "fight", "argues", "gestures", "points", "stands", "started"]
-            if any(k in vis_lower for k in action_keywords):
-                for sentence in re.split(r'[.\n]', clean_vis):
-                    s_low = sentence.lower().strip()
-                    if any(k in s_low for k in action_keywords) and len(s_low) > 8:
-                        items.append(
-                            MultimodalEvidenceItem(
-                                video_id=v_id,
-                                video_name=v_name,
-                                timestamp_start=t_start,
-                                timestamp_end=t_end,
-                                timestamp_formatted=t_fmt,
-                                modality="Event",
-                                content=sentence.strip(),
-                                relevance_score=relevance_score
-                            )
+        # 4. Action / Event detection (if movement or event described)
+        vis_lower = clean_vis.lower()
+        action_keywords = ["enters", "enter", "exits", "exit", "leaves", "leave", "walks", "walk", "running", "ran", "arrives", "steals", "theft", "punches", "fight", "argues", "gestures", "points", "stands", "started"]
+        if any(k in vis_lower for k in action_keywords):
+            for sentence in re.split(r'[.\n]', clean_vis):
+                s_low = sentence.lower().strip()
+                if any(k in s_low for k in action_keywords) and len(s_low) > 8:
+                    items.append(
+                        MultimodalEvidenceItem(
+                            video_id=v_id,
+                            video_name=v_name,
+                            timestamp_start=t_start,
+                            timestamp_end=t_end,
+                            timestamp_formatted=t_fmt,
+                            modality="Event",
+                            content=sentence.strip(),
+                            relevance_score=relevance_score
                         )
-                        break
+                    )
+                    break
 
         return items
 
@@ -296,7 +310,8 @@ class ChatService:
             "say", "said", "tell", "told", "speak", "spoke", "mention", "mentioned",
             "question", "questions", "asked", "asking", "answer", "answers", "explain",
             "video", "videos", "clip", "clips", "footage", "section", "part", "give", "show",
-            "detail", "details"
+            "detail", "details", "youtube", "channel", "channels", "name", "names", "creator",
+            "creators", "author", "authors", "handle", "handles", "instructor", "teacher"
         }
         raw_keywords = [w for w in re.findall(r'\b[a-zA-Z0-9_.-]{2,}\b', q_lower) if w not in meta_words]
         query_keywords = set(raw_keywords)
@@ -326,7 +341,7 @@ class ChatService:
             all_matches = content_matches + vid_matches
 
             if query_keywords and all_matches == 0:
-                # If query contains explicit topic terms and this segment contains NONE, penalize!
+                # Specific content query keywords not found in segment -> penalize score
                 relevance = max(0.0, base_score * 0.15)
             elif vid_matches > 0 and content_matches > 0:
                 relevance = max(0.95, base_score, 0.99)
@@ -670,7 +685,7 @@ class ChatService:
 
         await db.commit()
 
-        if "Low" in answer or "❌ Not found" in answer or "No sufficient evidence" in answer:
+        if "❌ Not found" in answer or "No sufficient evidence was found in the uploaded videos" in answer:
             confidence_level = "Low"
             confidence_score = 0.20
             citations = []
@@ -834,7 +849,7 @@ class ChatService:
         db.add(asst_msg)
         await db.commit()
 
-        if "Low" in answer or "❌ Not found" in answer or "No sufficient evidence" in answer:
+        if "❌ Not found" in answer or "No sufficient evidence was found in the uploaded videos" in answer:
             confidence_level = "Low"
             confidence_score = 0.20
             citations = []

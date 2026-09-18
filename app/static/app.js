@@ -3076,22 +3076,39 @@ function renderModalBody() {
         paneSelfTest.appendChild(selfTestWrap);
     }
 
+    // Always clear modal body immediately to prevent previous tab content from sticking
+    body.innerHTML = "";
+
     if (activeModalTab === 'quiz') {
         if (quizContainer) {
-            body.innerHTML = "";
+            quizContainer.style.display = "block";
+            const quizTakingWrap = document.getElementById("quizTakingWrap");
+            const quizResultsWrap = document.getElementById("quizResultsWrap");
+            const quizConfigCard = document.getElementById("quizConfigCard");
+
+            if (quizConfigCard && (!quizTakingWrap || quizTakingWrap.style.display === "none") && (!quizResultsWrap || quizResultsWrap.style.display === "none")) {
+                quizConfigCard.style.display = "block";
+            }
             body.appendChild(quizContainer);
+            if (currentVideoData && currentVideoData.id) {
+                loadPastQuizzes(currentVideoData.id);
+            }
+        } else {
+            body.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Quiz feature loading...</div>`;
         }
         return;
     }
 
     if (activeModalTab === 'selftest' || activeModalTab === 'selfTest') {
         if (selfTestWrap) {
-            body.innerHTML = "";
+            selfTestWrap.style.display = "block";
             body.appendChild(selfTestWrap);
             const qVal = document.getElementById("selfTestQuestionInput")?.value;
             if (!qVal || qVal.trim() === "" || qVal.includes("Loading AI concept")) {
                 loadSelfTestPromptQuestion();
             }
+        } else {
+            body.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Self-test feature loading...</div>`;
         }
         return;
     }
