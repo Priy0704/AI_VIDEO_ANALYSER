@@ -658,6 +658,22 @@ class ChatService:
             if len(citations) >= 4:
                 break
 
+        if not citations and scored_segments:
+            s0, sc0 = scored_segments[0]
+            t_fmt0 = f"{format_seconds_to_timestamp(s0.start_time)}–{format_seconds_to_timestamp(s0.end_time)}"
+            citations.append(
+                Citation(
+                    video_id=str(video.id),
+                    video_filename=video.filename,
+                    start_time=s0.start_time,
+                    end_time=s0.end_time,
+                    timestamp_formatted=t_fmt0,
+                    snippet=f"[Visual] {s0.visual_description or 'Video frame segment'}",
+                    relevance_score=sc0,
+                    modality="Visual"
+                )
+            )
+
         # Record messages
         user_msg = ChatMessage(session_id=session.id, role="user", content=query)
         asst_msg = ChatMessage(
@@ -833,8 +849,17 @@ class ChatService:
                         modality=item.modality
                     )
                 )
-            if len(citations) >= 4:
-                break
+
+        # Post-filter: keep only citations from videos explicitly referenced in the LLM's grounded answer
+        if matched_video_names and answer:
+            answer_lower = answer.lower()
+            ref_videos = [v for v in matched_video_names if v.lower() in answer_lower]
+            if ref_videos:
+                filtered_cits = [c for c in citations if c.video_filename in ref_videos]
+                if filtered_cits:
+                    citations = filtered_cits
+
+        citations = citations[:4]
 
         # Record messages in chat history
         user_msg = ChatMessage(session_id=session.id, role="user", content=query)
