@@ -813,6 +813,113 @@ class ChatService:
         is_summary_query = any(w in q_lower for w in ["summarize", "summary", "overview", "key points", "across all videos"])
         is_concept_query = any(w in q_lower for w in ["what is", "what are", "explain", "definition", "concept", "meaning", "in short", "simple", "how does", "tell me about", "who is", "describe"])
 
+        # Check Human-In-The-Loop (HITL) verified reviews across completed videos
+        completed_v_ids = [v.id for v in completed_videos]
+        stmt_hitl = (
+            select(HITLReview)
+            .where(
+                and_(
+                    HITLReview.video_id.in_(completed_v_ids),
+                    HITLReview.status.in_([HITLStatus.APPROVED, HITLStatus.CORRECTED])
+                )
+            )
+            .order_by(HITLReview.reviewed_at.desc())
+        )
+        verified_hitl_reviews = (await db.execute(stmt_hitl)).scalars().all()
+
+        matched_hitl = None
+        q_stopwords = {"what", "when", "where", "which", "who", "whom", "why", "how", "the", "and", "is", "are", "was", "were", "this", "that", "there"}
+        q_clean = re.sub(r'[^a-zA-Z0-9\s]', '', q_lower).strip()
+        q_tokens = set(w for w in q_clean.split() if len(w) > 2 and w not in q_stopwords)
+
+        for vr in verified_hitl_reviews:
+            vr_q_lower = vr.query.lower()
+            vr_clean = re.sub(r'[^a-zA-Z0-9\s]', '', vr_q_lower).strip()
+            if q_clean == vr_clean or q_lower in vr_q_lower or vr_q_lower in q_lower:
+                matched_hitl = vr
+                break
+            vr_tokens = set(w for w in vr_clean.split() if len(w) > 2 and w not in q_stopwords)
+            if q_tokens and vr_tokens and len(q_tokens.intersection(vr_tokens)) / max(len(q_tokens), len(vr_tokens)) >= 0.45:
+                matched_hitl = vr
+                break
+
+        # Subjective / Intent / Ambiguous emotion detector
+        sensitive_patterns = [
+            r"\b(angry|anger|mad|furious|upset|irritated|annoyed|गुस्सा|नाराज|राग|चिडलेला|क्रोधी)\b",
+            r"\b(attack|attacked|attacking|assault|assaulted|हमला|हल्ला)\b",
+            r"\b(fight|fighting|fought|brawl|punch|punching|hit|hitting|झगड़ा|लड़ाई|भांडण|मारामारी)\b",
+            r"\b(aggressive|aggressively|aggression|hostile|hostility|आक्रामक|आक्रमक)\b",
+            r"\b(argue|argued|arguing|argument|quarrel|dispute|बहस|वाद|तकरार)\b",
+            r"\b(intentionally|on purpose|deliberate|deliberately|malicious|maliciously|जानबूझकर|मुद्दाम|हेतू)\b",
+            r"\b(threat|threaten|threatened|threatening|धमकी)\b",
+            r"\b(harass|harassed|harassing|harassment|सताना|छेडछाड|त्रास)\b"
+        ]
+        is_sensitive_query = any(re.search(pat, q_lower) for pat in sensitive_patterns)
+
+        requires_hitl = False
+        hitl_record_id = None
+
+        # Sensitive Intent -> HITL Required
+        if is_sensitive_query and not matched_hitl:
+            requires_hitl = True
+            confidence_score = 0.68
+            confidence_level = "Medium"
+            primary_v = completed_videos[0]
+            time_str = "00:00–00:30"
+            if scored_cross_segments:
+                s0 = scored_cross_segments[0][0]
+                primary_v = scored_cross_segments[0][2] or primary_v
+                time_str = f"{format_seconds_to_timestamp(s0.start_time)}–{format_seconds_to_timestamp(s0.end_time)}"
+            answer = (
+                "⚠️ Uncertain\n\n"
+                "Answer:\n"
+                "Human review required. The available video evidence is ambiguous or subjective regarding human intent, hostile emotions, or altercations.\n\n"
+                "Evidence:\n"
+                f"1. [{primary_v.filename}]\n"
+                f"   Timestamp: [{time_str}]\n"
+                "   Type: Visual\n"
+                "   Evidence: Video footage captured requires human auditor review for subjective intent evaluation.\n\n"
+                "Confidence:\n"
+                "Medium\n\n"
+                "Confidence:\n"
+                "68%\n\n"
+                "Reason:\n"
+                "Subjective human intent, emotions, harassment, or conflicts require human auditor review.\n\n"
+                "Status:\n"
+                "HITL Required"
+            )
+            hitl_entry = HITLReview(
+                video_id=primary_v.id,
+                query=query,
+                ai_answer=answer,
+                confidence_score=confidence_score,
+                status=HITLStatus.PENDING,
+                created_at=datetime.utcnow()
+            )
+            db.add(hitl_entry)
+            await db.flush()
+            hitl_record_id = hitl_entry.id
+
+            user_msg = ChatMessage(session_id=session.id, role="user", content=query)
+            asst_msg = ChatMessage(session_id=session.id, role="assistant", content=answer, citations=[], confidence_score=confidence_score)
+            db.add(user_msg)
+            db.add(asst_msg)
+            await db.commit()
+
+            return ChatResponse(
+                session_id=session.id,
+                video_id=None,
+                query=query,
+                answer=answer,
+                citations=[],
+                confidence_score=confidence_score,
+                confidence_level=confidence_level,
+                requires_hitl=True,
+                hitl_review_id=hitl_record_id,
+                scope="all",
+                videos_analyzed=videos_analyzed
+            )
+
         # Check absence
         if not scored_cross_segments and not is_summary_query and not is_concept_query:
             answer = (
@@ -1080,10 +1187,12 @@ class ChatService:
 
                         is_not_found_response = (
                             raw_text.startswith("❌ Not found") or
-                            raw_lower.startswith("no sufficient evidence was found") or
-                            ("no sufficient evidence was found in the uploaded videos" in raw_lower and len(raw_text) < 250) or
-                            ("no supporting evidence found in the uploaded videos" in raw_lower and len(raw_text) < 250) or
-                            (raw_lower.startswith("i don't know") and len(raw_text) < 150)
+                            raw_lower.startswith("no sufficient evidence") or
+                            "no sufficient evidence was found in the uploaded videos" in raw_lower or
+                            "no supporting evidence found in the uploaded videos" in raw_lower or
+                            "not present in the video" in raw_lower or
+                            "content not found" in raw_lower or
+                            (raw_lower.startswith("i don't know") and "video" in raw_lower)
                         )
                         if is_not_found_response:
                             return (
