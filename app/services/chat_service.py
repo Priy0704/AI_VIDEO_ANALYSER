@@ -112,6 +112,12 @@ class ChatService:
             logger.warning(f"Failed to extract frame at {timestamp_sec}s from {video_path}: {e}")
         return None
 
+    def _format_timestamp(self, seconds: float) -> str:
+        s = max(0.0, seconds)
+        mins = int(s // 60)
+        secs = int(s % 60)
+        return f"{mins:02d}:{secs:02d}"
+
     def parse_temporal_scope(self, query: str, duration: Optional[float] = None) -> Tuple[Optional[float], Optional[float]]:
         """Extract explicit time range (e.g. 'between 2:00 and 4:00', 'first half', 'second half', 'at 2:15')."""
         q_lower = query.lower()
@@ -558,11 +564,11 @@ class ChatService:
         vis_ocr_notes = []
         for seg, score in scored_segments:
             if seg.ocr_text and seg.ocr_text.strip():
-                vis_ocr_notes.append(f"[{self.format_timestamp(seg.start_time)}] OCR: {seg.ocr_text.strip()}")
+                vis_ocr_notes.append(f"[{self._format_timestamp(seg.start_time)}] OCR: {seg.ocr_text.strip()}")
             elif seg.visual_description:
                 text_m = re.search(r'(?:On-Screen Text & Names|Visible Text & Names|Visible Text|Names|OCR):\s*(.+)', seg.visual_description, re.IGNORECASE)
                 if text_m:
-                    vis_ocr_notes.append(f"[{self.format_timestamp(seg.start_time)}] On-Screen Text: {text_m.group(1).strip()}")
+                    vis_ocr_notes.append(f"[{self._format_timestamp(seg.start_time)}] On-Screen Text: {text_m.group(1).strip()}")
         if vis_ocr_notes:
             full_video_overview = (full_video_overview + f"\n\nOn-Screen Text & Visual Highlights:\n" + "\n".join(vis_ocr_notes[:10])).strip()
 
@@ -921,9 +927,36 @@ class ChatService:
 
         confidence_score = float(scored_cross_segments[0][1]) if scored_cross_segments else 0.90
 
-        # Build multi-video summary overview
-        summaries_list = [f"- Video '{v.filename}': {v.summary}" for v in completed_videos if v.summary]
-        multi_video_summary = "\n".join(summaries_list) if summaries_list else "Multi-video library search."
+        # Build multi-video summary overview (Summary + Transcripts + Visual/OCR text)
+        stmt_all_segs = select(VideoSegment).where(VideoSegment.video_id.in_(completed_v_ids)).order_by(VideoSegment.start_time)
+        all_library_segments = (await db.execute(stmt_all_segs)).scalars().all()
+        segs_by_video: Dict[str, List[VideoSegment]] = {}
+        for s in all_library_segments:
+            segs_by_video.setdefault(str(s.video_id), []).append(s)
+
+        summaries_list = []
+        for v in completed_videos:
+            v_info = f"--- VIDEO: '{v.filename}' ---\n"
+            if v.summary:
+                v_info += f"Summary: {v.summary}\n"
+            if v.raw_transcripts and isinstance(v.raw_transcripts, list):
+                raw_t = " ".join([t.get("text", "") for t in v.raw_transcripts if isinstance(t, dict) and t.get("text")])
+                if raw_t.strip():
+                    v_info += f"Transcript Highlights: {raw_t[:600]}\n"
+            v_segs = segs_by_video.get(str(v.id), [])
+            v_vis_ocr = []
+            for seg in v_segs:
+                if seg.ocr_text and seg.ocr_text.strip():
+                    v_vis_ocr.append(f"[{self._format_timestamp(seg.start_time)}] OCR: {seg.ocr_text.strip()}")
+                elif seg.visual_description:
+                    text_m = re.search(r'(?:On-Screen Text & Names|Visible Text & Names|Visible Text|Names|OCR):\s*(.+)', seg.visual_description, re.IGNORECASE)
+                    if text_m:
+                        v_vis_ocr.append(f"[{self._format_timestamp(seg.start_time)}] On-Screen Text: {text_m.group(1).strip()}")
+            if v_vis_ocr:
+                v_info += f"On-Screen Text & Visual Highlights:\n" + "\n".join(v_vis_ocr[:5]) + "\n"
+            summaries_list.append(v_info.strip())
+
+        multi_video_summary = "\n\n".join(summaries_list) if summaries_list else "Multi-video library search."
 
         # Generate structured answer
         matched_video_names = list(dict.fromkeys([v.filename for _, _, v in scored_cross_segments if v])) or videos_analyzed
@@ -1097,6 +1130,11 @@ class ChatService:
             system_prompt = (
                 "You are VideoIntel Copilot, an AI assistant built to help users understand video content quickly without watching the entire video.\n"
                 "Act like ChatGPT: understand the user's question, use the analyzed video's summary, transcript, OCR text, and visual descriptions as your primary knowledge source, and provide a clear, simple, concise, and helpful answer.\n\n"
+                "MANDATORY MULTIMODAL VERIFICATION REQUIREMENT FOR ALL QUESTIONS:\n"
+                "For EVERY question (in both Single Video and All Videos modes):\n"
+                "1. Cross-verify ALL 3 knowledge layers: (a) Overall Video Summary, (b) Spoken Audio Transcript, and (c) Visual Scene Descriptions & On-Screen OCR Text.\n"
+                "2. Check for on-screen text, channel names (e.g. 'Pumpkin Family', 'Lumo Toons'), titles, and visual events that speakers may show visually without pronouncing out loud.\n"
+                "3. Deliver a neat, clean, well-grounded ChatGPT-style answer with embedded timestamp citations.\n\n"
                 f"{mode_instruction}\n"
                 "CRITICAL ANSWERING RULES:\n"
                 "1. DIRECT CONVERSATIONAL ANSWER: Answer the user's question directly in clear, natural language (like ChatGPT). Do NOT answer by merely listing timestamps (e.g. do NOT say 'Docker is discussed at 01:10, 01:30'). Provide the actual concept explanation or direct answer first!\n"
