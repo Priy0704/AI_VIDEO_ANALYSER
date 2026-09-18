@@ -58,11 +58,21 @@ class ChatService:
             genai.configure(api_key=self.api_key, transport="rest")
 
     def parse_exact_timestamp(self, query: str) -> Optional[float]:
-        """Extract exact single timestamp in seconds (e.g. '9:44', '9 : 44', 'at 09:44')."""
+        """Extract exact single timestamp in seconds (e.g. '9:44', '02:30', 'at 09:44', '150s')."""
         q_lower = query.lower()
-        m_colon = re.search(r'\b(\d{1,2})\s*:\s*(\d{2})\b', q_lower)
+        
+        # Match HH:MM:SS or MM:SS (e.g. 01:02:30 or 02:30)
+        m_colon = re.search(r'\b(?:(\d{1,2})\s*:\s*)?(\d{1,2})\s*:\s*(\d{2})\b', q_lower)
         if m_colon:
-            return float(int(m_colon.group(1)) * 60 + int(m_colon.group(2)))
+            if m_colon.group(1) is not None:
+                h = int(m_colon.group(1))
+                m = int(m_colon.group(2))
+                s = int(m_colon.group(3))
+                return float(h * 3600 + m * 60 + s)
+            else:
+                m = int(m_colon.group(2))
+                s = int(m_colon.group(3))
+                return float(m * 60 + s)
 
         m_min_sec = re.search(r'(\d+)\s*(?:minute|minutes|min)\s*(\d+)?\s*(?:second|seconds|sec)?', q_lower)
         if m_min_sec:
@@ -74,7 +84,7 @@ class ChatService:
         if m_min:
             return float(int(m_min.group(1)) * 60)
 
-        m_sec = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:second|seconds|sec)\b', q_lower)
+        m_sec = re.search(r'(?:around|at|in|about)\s*(\d+)\s*(?:second|seconds|sec|s)\b', q_lower)
         if m_sec:
             return float(m_sec.group(1))
 
@@ -287,22 +297,6 @@ class ChatService:
         scored_segments: List[Tuple[VideoSegment, float, Optional[Video]]] = []
         q_lower = query.lower()
 
-        person_words = {"who", "whose", "person", "someone", "speaker", "speaking", "presenter", "presenting", "man", "woman", "guy", "people", "host", "trainer", "suspect", "criminal", "individual", "boy", "girl"}
-        name_words = {"name", "names", "mentor", "mentors", "faculty", "member", "members", "singer", "singers", "artist", "artists", "title", "titles", "song", "songs", "track", "tracks", "author", "authors", "credit", "credits", "attendee", "attendees", "participant", "participants", "list", "listed", "written", "text", "slide", "slides"}
-        clothing_words = {"wear", "wearing", "clothes", "clothing", "shirt", "polo", "t-shirt", "suit", "jacket", "pants", "lanyard", "badge", "glasses", "hoodie", "cap", "mask"}
-        display_words = {"screen", "tv", "monitor", "slide", "slides", "display", "presentation", "ui", "login", "dashboard", "board", "projector", "table", "laptop", "phone", "object", "objects"}
-        speech_words = {"say", "said", "speak", "speaking", "talk", "talking", "discuss", "discussing", "topic", "words", "speech", "transcript", "dialogue", "hear", "voice", "audio"}
-        action_words = {"leave", "left", "enter", "enters", "entering", "room", "gesture", "gesturing", "point", "pointing", "stand", "standing", "walk", "walking", "running", "ran", "cctv", "camera", "door", "gate", "exit", "trace", "track"}
-        metric_words = {"subscriber", "subscribers", "views", "count", "number", "total", "3000", "2.56k", "k", "channel"}
-
-        has_person_query = any(w in q_lower for w in person_words)
-        has_name_query = any(w in q_lower for w in name_words)
-        has_clothing_query = any(w in q_lower for w in clothing_words)
-        has_display_query = any(w in q_lower for w in display_words)
-        has_speech_query = any(w in q_lower for w in speech_words)
-        has_action_query = any(w in q_lower for w in action_words)
-        has_metric_query = any(w in q_lower for w in metric_words)
-
         meta_words = {
             "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
             "the", "and", "is", "are", "was", "were", "this", "that", "there", "about",
@@ -326,11 +320,12 @@ class ChatService:
                         seg_vec = seg_vec / s_norm
                     base_score = float(np.dot(query_vec, seg_vec))
 
+            base_score = max(0.0, min(1.0, base_score))
+
             seg_trans = (segment.transcript_text or '').lower()
             seg_vis = (segment.visual_description or '').lower()
             seg_ocr = (segment.ocr_text or '').lower()
             vid_name = (video.filename if video else '').lower()
-            seg_text = f"{seg_vis} {seg_trans} {seg_ocr} {vid_name}"
 
             # Domain keyword matching
             transcript_matches = sum(1 for kw in query_keywords if kw in seg_trans)
@@ -340,19 +335,16 @@ class ChatService:
             vid_matches = sum(1 for kw in query_keywords if kw in vid_name)
             all_matches = content_matches + vid_matches
 
-            if query_keywords and all_matches == 0:
-                # Specific content query keywords not found in segment -> penalize score
-                relevance = max(0.0, base_score * 0.15)
-            elif vid_matches > 0 and content_matches > 0:
+            if vid_matches > 0 and content_matches > 0:
                 relevance = max(0.95, base_score, 0.99)
             elif ocr_matches > 0 and transcript_matches > 0:
                 relevance = max(0.92, base_score, 0.98)
             elif content_matches >= 1:
-                relevance = max(0.85, base_score, min(0.98, 0.88 + (0.03 * content_matches)))
+                relevance = max(base_score, min(0.98, 0.75 + (0.05 * content_matches)))
             elif vid_matches > 0:
-                relevance = max(0.85, base_score, 0.90)
+                relevance = max(base_score, 0.85)
             else:
-                relevance = max(0.0, base_score)
+                relevance = base_score
 
             scored_segments.append((segment, round(max(0.0, min(1.0, relevance)), 3), video))
 
@@ -370,18 +362,21 @@ class ChatService:
         """Retrieve most relevant video segments for a single video."""
         exact_time = self.parse_exact_timestamp(query)
         if exact_time is not None:
-            if video_duration and exact_time > video_duration + 5.0:
+            if video_duration and exact_time > video_duration + 10.0:
                 return []
+            # Retrieve ±15-20 seconds window around exact timestamp
+            t_start = max(0.0, exact_time - 20.0)
+            t_end = exact_time + 20.0
             stmt = select(VideoSegment).where(
                 and_(
                     VideoSegment.video_id == video_id,
-                    VideoSegment.start_time <= exact_time,
-                    VideoSegment.end_time >= exact_time
+                    VideoSegment.start_time <= t_end,
+                    VideoSegment.end_time >= t_start
                 )
-            )
+            ).order_by(VideoSegment.start_time)
             matched = (await db.execute(stmt)).scalars().all()
             if matched:
-                return [(matched[0], 0.98)]
+                return [(seg, 0.95) for seg in matched]
             stmt_all = select(VideoSegment).where(VideoSegment.video_id == video_id).order_by(VideoSegment.start_time)
             all_segs = (await db.execute(stmt_all)).scalars().all()
             if all_segs:
@@ -391,7 +386,7 @@ class ChatService:
 
         t_start, t_end = self.parse_temporal_scope(query, video_duration)
         if t_start is not None and t_end is not None:
-            if video_duration and t_start >= video_duration:
+            if video_duration and t_start >= video_duration + 5.0:
                 return []
             stmt = select(VideoSegment).where(
                 and_(
@@ -425,6 +420,26 @@ class ChatService:
         top_k: int = 12
     ) -> List[Tuple[VideoSegment, float, Video]]:
         """Retrieve most relevant video segments across all completed videos in the library."""
+        exact_time = self.parse_exact_timestamp(query)
+        if exact_time is not None:
+            t_start = max(0.0, exact_time - 20.0)
+            t_end = exact_time + 20.0
+            stmt_time = (
+                select(VideoSegment, Video)
+                .join(Video, VideoSegment.video_id == Video.id)
+                .where(
+                    and_(
+                        Video.status == VideoStatus.COMPLETED,
+                        VideoSegment.start_time <= t_end,
+                        VideoSegment.end_time >= t_start
+                    )
+                )
+                .order_by(VideoSegment.start_time)
+            )
+            time_rows = (await db.execute(stmt_time)).all()
+            if time_rows:
+                return [(r[0], 0.95, r[1]) for r in time_rows[:top_k]]
+
         stmt = (
             select(VideoSegment, Video)
             .join(Video, VideoSegment.video_id == Video.id)
@@ -520,14 +535,27 @@ class ChatService:
                 "tell me about this video", "what happened in this video", "explain the video"
             ]
         )
+        is_concept_query = any(
+            w in q_lower for w in [
+                "what is", "what are", "explain", "definition", "concept", "meaning",
+                "in short", "simple", "how does", "tell me about", "who is", "describe"
+            ]
+        )
 
         # Extract multimodal evidence items
         all_evidence_items: List[MultimodalEvidenceItem] = []
         for seg, score in scored_segments:
             all_evidence_items.extend(self.extract_evidence_items_from_segment(seg, video, relevance_score=score))
 
-        # Check absence
-        if not scored_segments or (scored_segments[0][1] < settings.CONFIDENCE_THRESHOLD and not is_summary_query and not is_sensitive_query):
+        # Build full video overview text (Summary + Transcript timeline)
+        full_video_overview = video.summary or ""
+        if video.raw_transcripts and isinstance(video.raw_transcripts, list):
+            raw_t_text = " ".join([t.get("text", "") for t in video.raw_transcripts if isinstance(t, dict) and t.get("text")])
+            if raw_t_text.strip():
+                full_video_overview = (full_video_overview + f"\n\nFull Video Transcript Highlights:\n{raw_t_text[:1500]}").strip()
+
+        # Check absence: only trigger early bailout if NO segments AND NO summary/transcript exist
+        if not scored_segments and not full_video_overview and not is_summary_query and not is_concept_query and not is_sensitive_query:
             answer = (
                 "❌ Not found\n\n"
                 "Answer:\n"
@@ -562,7 +590,7 @@ class ChatService:
         requires_hitl = False
         hitl_record_id = None
         confidence_level = "High"
-        confidence_score = float(scored_segments[0][1])
+        confidence_score = float(scored_segments[0][1]) if scored_segments else 0.90
 
         # Sensitive Intent -> HITL Required
         if is_sensitive_query and not matched_hitl:
@@ -620,13 +648,15 @@ class ChatService:
             # Extract keyframe if file exists
             frame_image = None
             if video.file_path and Path(video.file_path).exists():
-                exact_t = self.parse_exact_timestamp(query) or ((scored_segments[0][0].start_time + scored_segments[0][0].end_time) / 2.0)
+                exact_t = self.parse_exact_timestamp(query) or (
+                    ((scored_segments[0][0].start_time + scored_segments[0][0].end_time) / 2.0) if scored_segments else 0.0
+                )
                 frame_image = self._extract_frame_at_timestamp(Path(video.file_path), exact_t)
 
             answer = await self._generate_multimodal_qa_answer(
                 query=query,
                 evidence_items=all_evidence_items,
-                video_summary=video.summary,
+                video_summary=full_video_overview,
                 is_summary=is_summary_query,
                 confidence_score=confidence_score,
                 frame_image=frame_image,
@@ -781,9 +811,10 @@ class ChatService:
 
         q_lower = query.lower()
         is_summary_query = any(w in q_lower for w in ["summarize", "summary", "overview", "key points", "across all videos"])
+        is_concept_query = any(w in q_lower for w in ["what is", "what are", "explain", "definition", "concept", "meaning", "in short", "simple", "how does", "tell me about", "who is", "describe"])
 
         # Check absence
-        if not scored_cross_segments or (scored_cross_segments[0][1] < 0.25 and not is_summary_query):
+        if not scored_cross_segments and not is_summary_query and not is_concept_query:
             answer = (
                 "❌ Not found\n\n"
                 "Answer:\n"
@@ -815,14 +846,18 @@ class ChatService:
                 videos_analyzed=videos_analyzed
             )
 
-        confidence_score = float(scored_cross_segments[0][1])
+        confidence_score = float(scored_cross_segments[0][1]) if scored_cross_segments else 0.90
+
+        # Build multi-video summary overview
+        summaries_list = [f"- Video '{v.filename}': {v.summary}" for v in completed_videos if v.summary]
+        multi_video_summary = "\n".join(summaries_list) if summaries_list else "Multi-video library search."
 
         # Generate structured answer
-        matched_video_names = list(dict.fromkeys([v.filename for _, _, v in scored_cross_segments if v]))
+        matched_video_names = list(dict.fromkeys([v.filename for _, _, v in scored_cross_segments if v])) or videos_analyzed
         answer = await self._generate_multimodal_qa_answer(
             query=query,
             evidence_items=all_evidence_items,
-            video_summary="Multi-video library search",
+            video_summary=multi_video_summary,
             is_summary=is_summary_query,
             confidence_score=confidence_score,
             video_filenames=matched_video_names,
@@ -955,13 +990,34 @@ class ChatService:
             candidate_models = [settings.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-pro-latest"]
             candidate_models = list(dict.fromkeys([m for m in candidate_models if m]))
 
+            mode_instruction = (
+                "ALL VIDEOS MODE (Global Multi-Video Search):\n"
+                "- Search across all analyzed videos.\n"
+                "- In your answer, you MUST ALWAYS mention the source video filename (e.g. '[video_filename.mp4]' or 'In video_filename.mp4 at 02:30') and timestamp for EVERY factual statement.\n"
+            ) if is_cross_video else (
+                "THIS VIDEO MODE (Single Video Search):\n"
+                "- Search only the selected video.\n"
+                "- Answer directly using the video's summary, transcript, and visual context.\n"
+            )
+
+            summary_block = f"OVERALL VIDEO SUMMARY & TRANSCRIPT OVERVIEW:\n{video_summary}\n\n" if video_summary else ""
+
             system_prompt = (
-                "You are an expert Multimodal AI Video Intelligence Analyst analyzing video evidence across all modalities (Transcript, Visual scenes, OCR on-screen text, Events).\n"
-                "GROUNDING PRINCIPLE: Ground all answers strictly in the provided evidence. NEVER hallucinate facts, numbers, video names, or timestamps.\n\n"
+                "You are VideoIntel Copilot, an AI assistant built to help users understand video content quickly without watching the entire video.\n"
+                "Act like ChatGPT: understand the user's question, use the analyzed video's summary, transcript, OCR text, and visual descriptions as your primary knowledge source, and provide a clear, simple, concise, and helpful answer.\n\n"
+                f"{mode_instruction}\n"
+                "CRITICAL ANSWERING RULES:\n"
+                "1. DIRECT CONVERSATIONAL ANSWER: Answer the user's question directly in clear, natural language (like ChatGPT). Do NOT answer by merely listing timestamps (e.g. do NOT say 'Docker is discussed at 01:10, 01:30'). Provide the actual concept explanation or direct answer first!\n"
+                "2. SUPPORTING TIMESTAMPS: Use timestamps (e.g. 01:23 or 01:15–01:30) as supporting references embedded naturally in your text or cited in evidence, not as the main answer.\n"
+                "3. GENERAL / CONCEPT QUESTIONS (e.g. 'What is Docker?', 'Explain X'): Provide the clear definition/explanation taught in the video using the summary and transcript context. Do NOT require an exact timestamp match.\n"
+                "4. TIMESTAMP QUESTIONS (e.g. 'What happened at 02:30?'): Focus specifically on what occurred around that moment (±15–20 seconds).\n"
+                "5. SUMMARY QUESTIONS: Provide a cohesive, structured overview of the main topics and takeaways from the entire video.\n"
+                "6. VISUAL QUESTIONS: Prioritize visual scene descriptions and OCR text.\n"
+                "7. GROUNDING & ABSENCE: Never invent information unsupported by the video. If the requested information is genuinely absent from the video summary, transcript, OCR, and visuals, answer with 'No sufficient evidence was found in the uploaded videos.' with Low confidence.\n\n"
                 "RESPONSE FORMAT:\n"
-                "Provide a clear, direct, and well-grounded answer to the user's question.\n"
-                "Cite exact video timestamps (e.g. 01:23) directly in your answer text where relevant.\n"
-                "Do NOT include raw heading labels like 'KEY POINTS:' or repeated evidence lists in the main text.\n\n"
+                "Provide a clear, direct, and well-grounded answer to the user's question adhering to the exact 4-part structure:\n\n"
+                "Answer:\n"
+                "[Clear, direct ChatGPT-style answer explaining the topic or answering the question, with supporting timestamp references where helpful]\n\n"
                 "Evidence:\n"
                 "1. [Video Name]\n"
                 "   Timestamp: [MM:SS]\n"
@@ -1002,6 +1058,7 @@ class ChatService:
                 "   - Medium: Partial view, single unverified modality, slight ambiguity, or minor discrepancy between modalities.\n"
                 "   - Low: Weak evidence, blurry visuals, unclear speech, or absent evidence.\n\n"
                 f"{hitl_block}"
+                f"{summary_block}"
                 f"MULTIMODAL EVIDENCE AVAILABLE:\n{evidence_context_block}\n\n"
                 f"USER QUESTION: {query}"
             )
@@ -1021,13 +1078,14 @@ class ChatService:
                         raw_text = res.text.strip()
                         raw_lower = raw_text.lower()
 
-                        if (
-                            "not present in the video" in raw_lower
-                            or "content not found" in raw_lower
-                            or "no sufficient evidence" in raw_lower
-                            or "no supporting evidence" in raw_lower
-                            or ("i don't know" in raw_lower and "video" in raw_lower)
-                        ):
+                        is_not_found_response = (
+                            raw_text.startswith("❌ Not found") or
+                            raw_lower.startswith("no sufficient evidence was found") or
+                            ("no sufficient evidence was found in the uploaded videos" in raw_lower and len(raw_text) < 250) or
+                            ("no supporting evidence found in the uploaded videos" in raw_lower and len(raw_text) < 250) or
+                            (raw_lower.startswith("i don't know") and len(raw_text) < 150)
+                        )
+                        if is_not_found_response:
                             return (
                                 "❌ Not found\n\n"
                                 "Answer:\n"
