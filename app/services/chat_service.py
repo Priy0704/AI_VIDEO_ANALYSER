@@ -592,38 +592,7 @@ class ChatService:
         confidence_level = "High"
         confidence_score = float(scored_segments[0][1]) if scored_segments else 0.90
 
-        # Sensitive Intent -> HITL Required
-        if is_sensitive_query and not matched_hitl:
-            requires_hitl = True
-            confidence_score = 0.68
-            confidence_level = "Medium"
-            time_str = "00:00–00:30"
-            if scored_segments:
-                s0 = scored_segments[0][0]
-                time_str = f"{format_seconds_to_timestamp(s0.start_time)}–{format_seconds_to_timestamp(s0.end_time)}"
-            answer = (
-                "⚠️ Uncertain\n\n"
-                "Answer:\n"
-                "Human review required. The available video evidence is ambiguous or subjective.\n\n"
-                "Evidence:\n"
-                f"1. [{video.filename}]\n"
-                f"   Timestamp: [{time_str}]\n"
-                "   Type: Visual\n"
-                "   Evidence: Video frame captures human interaction that requires human auditor review.\n\n"
-                "Confidence:\n"
-                "Medium\n"
-                "Confidence:\n"
-                "68%\n\n"
-                "Reason:\n"
-                "Subjective human intent, emotions, or conflicts require human auditor review.\n\n"
-                f"Timestamp:\n"
-                f"{time_str}\n\n"
-                f"Video:\n"
-                f"{video.filename}\n\n"
-                "Status:\n"
-                "HITL Required"
-            )
-        elif matched_hitl:
+        if matched_hitl:
             confidence_score = 1.0
             confidence_level = "High"
             v_ans = matched_hitl.corrected_answer if (matched_hitl.status == HITLStatus.CORRECTED and matched_hitl.corrected_answer) else matched_hitl.ai_answer
@@ -665,6 +634,12 @@ class ChatService:
                 is_cross_video=False,
                 requires_hitl=False
             )
+
+            # Post-check: if LLM indicated human review required or ambiguous, trigger HITL
+            if "human review required" in answer.lower() or "ambiguous" in answer.lower():
+                requires_hitl = True
+                confidence_level = "Medium"
+                confidence_score = 0.68
 
         # Build deduplicated citations
         citations = []
@@ -859,67 +834,7 @@ class ChatService:
         requires_hitl = False
         hitl_record_id = None
 
-        # Sensitive Intent -> HITL Required
-        if is_sensitive_query and not matched_hitl:
-            requires_hitl = True
-            confidence_score = 0.68
-            confidence_level = "Medium"
-            primary_v = completed_videos[0]
-            time_str = "00:00–00:30"
-            if scored_cross_segments:
-                s0 = scored_cross_segments[0][0]
-                primary_v = scored_cross_segments[0][2] or primary_v
-                time_str = f"{format_seconds_to_timestamp(s0.start_time)}–{format_seconds_to_timestamp(s0.end_time)}"
-            answer = (
-                "⚠️ Uncertain\n\n"
-                "Answer:\n"
-                "Human review required. The available video evidence is ambiguous or subjective regarding human intent, hostile emotions, or altercations.\n\n"
-                "Evidence:\n"
-                f"1. [{primary_v.filename}]\n"
-                f"   Timestamp: [{time_str}]\n"
-                "   Type: Visual\n"
-                "   Evidence: Video footage captured requires human auditor review for subjective intent evaluation.\n\n"
-                "Confidence:\n"
-                "Medium\n\n"
-                "Confidence:\n"
-                "68%\n\n"
-                "Reason:\n"
-                "Subjective human intent, emotions, harassment, or conflicts require human auditor review.\n\n"
-                "Status:\n"
-                "HITL Required"
-            )
-            hitl_entry = HITLReview(
-                video_id=primary_v.id,
-                query=query,
-                ai_answer=answer,
-                confidence_score=confidence_score,
-                status=HITLStatus.PENDING,
-                created_at=datetime.utcnow()
-            )
-            db.add(hitl_entry)
-            await db.flush()
-            hitl_record_id = hitl_entry.id
-
-            user_msg = ChatMessage(session_id=session.id, role="user", content=query)
-            asst_msg = ChatMessage(session_id=session.id, role="assistant", content=answer, citations=[], confidence_score=confidence_score)
-            db.add(user_msg)
-            db.add(asst_msg)
-            await db.commit()
-
-            return ChatResponse(
-                session_id=session.id,
-                video_id=None,
-                query=query,
-                answer=answer,
-                citations=[],
-                confidence_score=confidence_score,
-                confidence_level=confidence_level,
-                requires_hitl=True,
-                hitl_review_id=hitl_record_id,
-                scope="all",
-                videos_analyzed=videos_analyzed
-            )
-        elif matched_hitl:
+        if matched_hitl:
             v_obj = await db.get(Video, matched_hitl.video_id) if matched_hitl.video_id else None
             v_name = v_obj.filename if v_obj else (completed_videos[0].filename if completed_videos else "Verified Video")
             v_ans = matched_hitl.corrected_answer if (matched_hitl.status == HITLStatus.CORRECTED and matched_hitl.corrected_answer) else matched_hitl.ai_answer
@@ -1011,6 +926,24 @@ class ChatService:
             requires_hitl=False
         )
 
+        # Post-check: if LLM indicated human review required or ambiguous, trigger HITL
+        if "human review required" in answer.lower() or "ambiguous" in answer.lower():
+            requires_hitl = True
+            confidence_level = "Medium"
+            confidence_score = 0.68
+            primary_v = completed_videos[0]
+            hitl_entry = HITLReview(
+                video_id=primary_v.id,
+                query=query,
+                ai_answer=answer,
+                confidence_score=confidence_score,
+                status=HITLStatus.PENDING,
+                created_at=datetime.utcnow()
+            )
+            db.add(hitl_entry)
+            await db.flush()
+            hitl_record_id = hitl_entry.id
+
         # Build deduplicated citations
         citations: List[Citation] = []
         seen_cit_keys = set()
@@ -1074,7 +1007,8 @@ class ChatService:
             citations=citations,
             confidence_score=confidence_score,
             confidence_level=confidence_level,
-            requires_hitl=False,
+            requires_hitl=requires_hitl,
+            hitl_review_id=hitl_record_id,
             scope="all",
             videos_analyzed=videos_analyzed
         )
@@ -1194,9 +1128,11 @@ class ChatService:
                 "   - Confidence MUST be: 'Low'\n"
                 "   - Reason: 'The requested information does not appear across any of the analyzed videos.'\n"
                 "   - Do NOT guess, invent facts, or create imaginary timestamps!\n\n"
-                "4. SUBJECTIVE INTENT & EMOTIONS (Uncertain / HITL):\n"
-                "   If the user asks about subjective emotions, hostile intent, or disputes (e.g. 'Was the person angry?', 'Was this a fight?'):\n"
-                "   - Answer MUST state: 'Human review required. The available video evidence is ambiguous or subjective.'\n"
+                "4. SENSITIVE INTENT, EMOTIONS & CONFLICT EVALUATION:\n"
+                "   Evaluate the video's Transcript (spoken dialogue, shouting, profanity, harsh words), Visual descriptions (physical actions, fighting, theft), and OCR.\n"
+                "   - IF evidence clearly shows fighting, assault, theft, shouting, or harsh language: Answer YES directly, describing the event with timestamps.\n"
+                "   - IF evidence clearly shows calm dialogue, educational demonstration, romantic conversation, or normal activity with NO fighting/theft/assault: Answer NO directly with evidence (e.g. 'No theft or physical altercation occurred. The video covers Docker containerization concepts.').\n"
+                "   - ONLY IF the video evidence is genuinely blurry, incomplete, or ambiguous where you cannot determine: Answer MUST state: 'Human review required. The available video evidence is ambiguous or subjective.'\n"
                 "   - Confidence: 'Medium'\n"
                 "   - Reason: 'Subjective human intent, emotions, or conflicts require human auditor review.'\n\n"
                 "5. CONFIDENCE CALIBRATION:\n"
