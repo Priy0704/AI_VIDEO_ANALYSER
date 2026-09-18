@@ -2075,14 +2075,25 @@ async function loadHITLReviews() {
         }
 
         container.innerHTML = reviews.map(r => `
-            <div class="hitl-item" id="hitl-${r.id}">
-                <div style="font-weight: 600; color: #f1f5f9; margin-bottom: 0.2rem;">${escapeHtml(r.query)}</div>
-                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 0.35rem;">Confidence: ${Math.round(r.confidence_score * 100)}%</div>
+            <div class="hitl-item" id="hitl-${r.id}" style="padding: 0.6rem; border-radius: 8px; background: rgba(30,41,59,0.7); border: 1px solid rgba(255,255,255,0.08); margin-bottom: 0.5rem;">
+                <div style="font-weight: 600; color: #f1f5f9; font-size: 0.78rem; margin-bottom: 0.2rem;">${escapeHtml(r.query)}</div>
+                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 0.4rem;">AI Score: ${Math.round(r.confidence_score * 100)}% (HITL Flagged)</div>
+                
+                <div style="margin-bottom: 0.4rem;">
+                    <label style="font-size: 0.65rem; color: #94a3b8; display: block; margin-bottom: 0.15rem;">Verified Answer / Decision (Yes/No / Fact):</label>
+                    <input type="text" id="hitl-ans-${r.id}" placeholder="e.g. No theft or assault occurred." style="width: 100%; font-size: 0.7rem; padding: 0.25rem 0.4rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 4px; box-sizing: border-box;" />
+                </div>
+                
+                <div style="margin-bottom: 0.4rem;">
+                    <label style="font-size: 0.65rem; color: #94a3b8; display: block; margin-bottom: 0.15rem;">Auditor Justification & Video Reference:</label>
+                    <input type="text" id="hitl-notes-${r.id}" placeholder="e.g. Verified on cctv_gate.mp4 (01:45). Subject dropped keys." style="width: 100%; font-size: 0.7rem; padding: 0.25rem 0.4rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 4px; box-sizing: border-box;" />
+                </div>
+
                 <div style="display: flex; gap: 0.3rem;">
-                    <button class="btn-chat-action" style="background: rgba(16,185,129,0.15); color: #34d399;" onclick="resolveHITL('${r.id}', true)">
-                        <i class="fa-solid fa-check"></i> Approve
+                    <button class="btn-chat-action" style="background: rgba(16,185,129,0.2); color: #34d399; font-size: 0.68rem; padding: 0.25rem 0.5rem;" onclick="submitAuditorReview('${r.id}', 'corrected')">
+                        <i class="fa-solid fa-check-double"></i> Submit Verified Decision
                     </button>
-                    <button class="btn-chat-action" style="background: rgba(239,68,68,0.15); color: #f87171;" onclick="resolveHITL('${r.id}', false)">
+                    <button class="btn-chat-action" style="background: rgba(239,68,68,0.2); color: #f87171; font-size: 0.68rem; padding: 0.25rem 0.5rem;" onclick="submitAuditorReview('${r.id}', 'rejected')">
                         <i class="fa-solid fa-xmark"></i> Reject
                     </button>
                 </div>
@@ -2093,18 +2104,29 @@ async function loadHITLReviews() {
     }
 }
 
-async function resolveHITL(id, approved) {
+async function submitAuditorReview(id, statusType) {
     try {
-        const res = await fetch(`/api/v1/hitl/reviews/${id}/resolve`, {
+        const ansInput = document.getElementById(`hitl-ans-${id}`);
+        const notesInput = document.getElementById(`hitl-notes-${id}`);
+        const corrected_answer = ansInput ? ansInput.value.trim() : "";
+        const reviewer_notes = notesInput ? notesInput.value.trim() : "";
+
+        const payload = {
+            status: statusType === 'rejected' ? 'rejected' : (corrected_answer ? 'corrected' : 'approved'),
+            corrected_answer: corrected_answer || null,
+            reviewer_notes: reviewer_notes || null
+        };
+
+        const res = await fetch(`/api/v1/hitl/reviews/${id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: approved ? "approve" : "reject" })
+            body: JSON.stringify(payload)
         });
         if (res.ok) {
             loadHITLReviews();
         }
     } catch (e) {
-        console.error("Error resolving HITL:", e);
+        console.error("Error submitting auditor review:", e);
     }
 }
 

@@ -919,6 +919,45 @@ class ChatService:
                 scope="all",
                 videos_analyzed=videos_analyzed
             )
+        elif matched_hitl:
+            v_obj = await db.get(Video, matched_hitl.video_id) if matched_hitl.video_id else None
+            v_name = v_obj.filename if v_obj else (completed_videos[0].filename if completed_videos else "Verified Video")
+            v_ans = matched_hitl.corrected_answer if (matched_hitl.status == HITLStatus.CORRECTED and matched_hitl.corrected_answer) else matched_hitl.ai_answer
+            clean_v = re.sub(r'^(?:✅ Found\s*)?(?:Answer:\s*)+', '', v_ans, flags=re.IGNORECASE).strip().split("Timestamp:")[0].strip()
+            answer = (
+                "✅ Found\n\n"
+                "Answer:\n"
+                f"{clean_v}\n\n"
+                "Evidence:\n"
+                f"1. [{v_name}]\n"
+                "   Timestamp: [00:00–00:30]\n"
+                "   Type: Human Auditor Verification\n"
+                f"   Evidence: Human auditor verified decision: {matched_hitl.reviewer_notes or 'Audited fact'}\n\n"
+                "Confidence:\n"
+                "High\n\n"
+                "Confidence:\n"
+                "100% (Human Verified)\n\n"
+                "Reason:\n"
+                f"Information directly verified and approved by human auditor: {matched_hitl.reviewer_notes or 'Audited fact'}."
+            )
+            user_msg = ChatMessage(session_id=session.id, role="user", content=query)
+            asst_msg = ChatMessage(session_id=session.id, role="assistant", content=answer, citations=[], confidence_score=1.0)
+            db.add(user_msg)
+            db.add(asst_msg)
+            await db.commit()
+
+            return ChatResponse(
+                session_id=session.id,
+                video_id=None,
+                query=query,
+                answer=answer,
+                citations=[],
+                confidence_score=1.0,
+                confidence_level="High",
+                requires_hitl=False,
+                scope="all",
+                videos_analyzed=videos_analyzed
+            )
 
         # Check absence
         if not scored_cross_segments and not is_summary_query and not is_concept_query:
