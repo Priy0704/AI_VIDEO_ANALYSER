@@ -1169,12 +1169,19 @@
                 </div>
             </div>
 
-            <div class="sidebar-footer">
-                <div class="user-avatar">PD</div>
-                <div class="user-info">
-                    <div class="user-name">Priyanka Davhare</div>
-                    <div class="user-role-badge" id="sidebarRoleBadge">Org Admin</div>
+            <div class="sidebar-footer" style="padding:0.85rem 1rem; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:0.5rem; background:rgba(0,0,0,0.2);">
+                <div style="display:flex; align-items:center; gap:0.65rem; flex:1; min-width:0;">
+                    <div style="width:36px; height:36px; min-width:36px; border-radius:50%; background:linear-gradient(135deg, #0284c7, #6366f1); color:white; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:0.85rem; box-shadow:0 0 10px rgba(56,189,248,0.3);">
+                        PD
+                    </div>
+                    <div style="display:flex; flex-direction:column; min-width:0; flex:1;">
+                        <div style="font-size:0.82rem; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Priyanka Davhare</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);" id="sidebarRoleBadge">Org Admin</div>
+                    </div>
                 </div>
+                <button class="topbar-btn" onclick="signOutUser()" title="Sign Out to Onboarding" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#f87171; padding:0.4rem 0.65rem; font-size:0.75rem;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+                </button>
             </div>
         </aside>
 
@@ -1201,18 +1208,6 @@
                     <button class="topbar-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
                         <i class="fa-solid fa-moon" id="themeIcon"></i> Theme
                     </button>
-                    <button class="topbar-btn" onclick="toggleRoleView()" title="Toggle Admin vs Normal User view mode">
-                        <i class="fa-solid fa-user-gear"></i> Toggle Admin/User View
-                    </button>
-                    <button class="topbar-btn" onclick="showOnboardingPage()">
-                        <i class="fa-solid fa-compass"></i> Onboarding
-                    </button>
-                    <button class="topbar-btn" onclick="showLoginPage()">
-                        <i class="fa-solid fa-right-from-bracket"></i> Switch Persona
-                    </button>
-                    <div style="font-size:0.75rem; font-weight:700; color:#34d399; background:rgba(16,185,129,0.15); padding:0.3rem 0.65rem; border-radius:9999px; border:1px solid rgba(16,185,129,0.3);">
-                        ● AI Engine Ready
-                    </div>
                 </div>
             </header>
 

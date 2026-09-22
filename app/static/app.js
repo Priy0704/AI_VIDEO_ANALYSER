@@ -3562,6 +3562,11 @@ function showLoginPage() {
     if (p) p.classList.add('active');
 }
 
+function signOutUser() {
+    viewHistoryStack = ['dashboard'];
+    showOnboardingPage();
+}
+
 // Theme Switcher (Dark Mode vs Light Mode)
 function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
