@@ -3880,12 +3880,16 @@ function toggleTheme() {
     }
 }
 
-// Back Navigation History Stack
+// Back & Forward Navigation History Stack
 let viewHistoryStack = ['dashboard'];
+let viewForwardStack = [];
 
-function switchView(viewName) {
-    if (viewHistoryStack[viewHistoryStack.length - 1] !== viewName) {
-        viewHistoryStack.push(viewName);
+function switchView(viewName, isHistoryNav = false) {
+    if (!isHistoryNav) {
+        if (viewHistoryStack[viewHistoryStack.length - 1] !== viewName) {
+            viewHistoryStack.push(viewName);
+        }
+        viewForwardStack = [];
     }
     document.querySelectorAll('.view-pane').forEach(el => el.classList.remove('active'));
     const target = document.getElementById(`view-${viewName}`);
@@ -3913,11 +3917,20 @@ function switchView(viewName) {
 
 function goBack() {
     if (viewHistoryStack.length > 1) {
-        viewHistoryStack.pop();
+        const current = viewHistoryStack.pop();
+        viewForwardStack.push(current);
         const prevView = viewHistoryStack[viewHistoryStack.length - 1];
-        switchView(prevView);
+        switchView(prevView, true);
     } else {
-        switchView('dashboard');
+        switchView('dashboard', true);
+    }
+}
+
+function goForward() {
+    if (viewForwardStack.length > 0) {
+        const nextView = viewForwardStack.pop();
+        viewHistoryStack.push(nextView);
+        switchView(nextView, true);
     }
 }
 

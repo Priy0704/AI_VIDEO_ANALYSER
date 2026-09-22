@@ -1128,14 +1128,13 @@
                     <button class="topbar-btn" onclick="goBack()" title="Go to previous view">
                         <i class="fa-solid fa-arrow-left"></i> Back
                     </button>
+                    <button class="topbar-btn" onclick="goForward()" title="Go to next view">
+                        Next <i class="fa-solid fa-arrow-right"></i>
+                    </button>
                     <div class="tenant-selector">
                         <i class="fa-solid fa-building"></i>
                         <span>Acme Corp</span>
                         <i class="fa-solid fa-chevron-down" style="font-size:0.65rem; color:var(--text-muted);"></i>
-                    </div>
-
-                    <div style="font-size:0.78rem; font-weight:700; color:var(--primary); background:rgba(56,189,248,0.1); padding:0.25rem 0.65rem; border-radius:9999px; border:1px solid rgba(56,189,248,0.3);" id="topbarRolePill">
-                        ORG ADMIN
                     </div>
                 </div>
 
@@ -1158,12 +1157,9 @@
                             Welcome to your workspace. Upload videos, ingest links, explore transcripts and visual insights, and ask AI Copilot questions.
                         </p>
                     </div>
-                    <div style="display:flex; gap:0.75rem;">
-                        <button class="topbar-btn btn-primary" onclick="switchView('videos'); switchUploadMode('url');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
-                            <i class="fa-solid fa-link"></i> Ingest Video Link
-                        </button>
-                        <button class="topbar-btn" onclick="switchView('videos'); switchUploadMode('file');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
-                            <i class="fa-solid fa-upload"></i> Upload Local File
+                    <div>
+                        <button class="topbar-btn btn-primary" onclick="switchView('videos');" style="padding:0.65rem 1.25rem; font-size:0.88rem; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; box-shadow:0 0 15px rgba(56,189,248,0.3);">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Ingest / Upload Video
                         </button>
                     </div>
                 </div>
