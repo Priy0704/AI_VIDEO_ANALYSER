@@ -600,7 +600,7 @@
         .view-pane { display: none; flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
         .view-pane.active { display: flex; flex-direction: column; }
 
-        #view-videos.active { padding: 0; display: block; height: calc(100vh - 54px); overflow: hidden; }
+        #view-videos.active { padding: 1.25rem; display: block; height: calc(100vh - 54px); overflow-y: auto; box-sizing: border-box; }
 
         /* -------------------------------------------------------------------------
            3-COLUMN VIDEO INTELLIGENCE WORKSPACE (EXACT MATCH TO USER'S IMAGE)
@@ -1352,7 +1352,7 @@
                ========================================================================= -->
             <main id="view-videos" class="view-pane active" style="padding:1.25rem; gap:1.25rem;">
                 <!-- STAGE 1: VIDEO INGESTION & LIBRARY GALLERY -->
-                <div id="workspace-library-stage" style="display:flex; flex-direction:column; gap:1.25rem;">
+                <div id="workspace-library-stage" style="display:flex; flex-direction:column; gap:1.25rem; padding-bottom:2.5rem;">
                     <!-- Ingest Video Box -->
                     <div class="card" style="background:var(--bg-card); border:1px solid var(--border); padding:1.25rem; border-radius:var(--radius-lg);">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.75rem;">
