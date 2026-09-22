@@ -84,14 +84,21 @@ class VideoTaskQueue:
                 await db.commit()
 
     async def _run_pipeline_steps(self, video_id: str, video_path: Path) -> None:
-        """Execute metadata extraction, transcription, vision descriptions, and pgvector fusion indexing."""
+        """Execute metadata extraction, transcription, vision descriptions, and pgvector fusion indexing with timing & cost tracking."""
+        import time
+        from app.services.cost_service import cost_service
+        stage_timings = {}
+
         # 1. Validation & Metadata extraction
+        t0 = time.time()
         await self._update_video_progress(
             video_id, VideoStatus.PROCESSING, 20, "Extracting Video Metadata"
         )
         meta = self.video_processor.get_metadata(video_path)
+        stage_timings["Metadata"] = round(time.time() - t0, 2)
 
         # 2. Extract Audio & Transcribe
+        t0 = time.time()
         await self._update_video_progress(
             video_id, VideoStatus.PROCESSING, 35, "Extracting & Transcribing Audio",
             duration_seconds=meta.duration_seconds
@@ -99,20 +106,26 @@ class VideoTaskQueue:
         audio_path = settings.STORAGE_DIR / f"{video_id}_audio.wav"
         extracted_audio = self.video_processor.extract_audio(video_path, audio_path)
         transcripts = await self.audio_transcriber.transcribe(extracted_audio)
+        stage_timings["ASR"] = round(time.time() - t0, 2)
 
         # 3. Temporal Frame Sampling
+        t0 = time.time()
         await self._update_video_progress(
             video_id, VideoStatus.PROCESSING, 55, "Sampling Keyframes"
         )
         frame_samples = self.video_processor.sample_frames(video_path, video_id)
+        stage_timings["Keyframes"] = round(time.time() - t0, 2)
 
         # 4. Multimodal Visual Perception
+        t0 = time.time()
         await self._update_video_progress(
             video_id, VideoStatus.PROCESSING, 75, "Analyzing Visual Perception"
         )
         visual_observations = await self.vision_describer.describe_frames(frame_samples)
+        stage_timings["Vision"] = round(time.time() - t0, 2)
 
         # 5. Temporal Fusion & pgvector Indexing
+        t0 = time.time()
         await self._update_video_progress(
             video_id, VideoStatus.PROCESSING, 90, "Indexing Temporal Vectors in pgvector"
         )
@@ -129,8 +142,10 @@ class VideoTaskQueue:
                 transcripts=transcripts,
                 visuals=visual_observations
             )
+            stage_timings["Indexing"] = round(time.time() - t0, 2)
 
             # 6. Video Type Classification (Knowledge vs Observational)
+            t0 = time.time()
             await self._update_video_progress(
                 video_id, VideoStatus.PROCESSING, 96, "Classifying Video Content"
             )
@@ -142,16 +157,37 @@ class VideoTaskQueue:
                 summary=video.summary,
                 duration_seconds=meta.duration_seconds
             )
+            stage_timings["Classification"] = round(time.time() - t0, 2)
+
+            # Calculate cost estimate and save metadata
+            cost_info = await cost_service.estimate_video_cost(meta.duration_seconds, db)
+
             video.video_type = classification.video_type
             video.video_type_label = classification.label
             video.video_type_confidence = classification.confidence
             video.video_type_reason = classification.reason
+            video.stage_timings_json = stage_timings
+            video.estimated_cost = cost_info["estimated_total_cost"]
+            video.actual_cost = cost_info["estimated_total_cost"]
+
+            # Record cost ledger
+            await cost_service.record_actual_cost(
+                session=db,
+                video_id=video.id,
+                organization_id=video.organization_id or "org-default-acme",
+                user_id=video.uploaded_by_user_id or "usr-default-admin",
+                processing_stage="Full Multimodal Indexing Pipeline",
+                input_tokens=int(meta.duration_seconds * 100),
+                output_tokens=int(meta.duration_seconds * 50),
+                ai_calls_count=len(frame_samples) + 2
+            )
+
             await db.commit()
 
         await self._update_video_progress(
             video_id, VideoStatus.COMPLETED, 100, "Completed"
         )
-        logger.info(f"Pipeline completed successfully for video {video_id} (classified as: {classification.label})")
+        logger.info(f"Pipeline completed successfully for video {video_id} (stage_timings: {stage_timings})")
 
     async def _process_video_pipeline(self, video_id: str, video_path: Path) -> None:
         """Worker executing the full perception and indexing pipeline under semaphore."""

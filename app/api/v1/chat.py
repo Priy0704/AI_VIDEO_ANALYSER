@@ -13,6 +13,9 @@ from app.schemas.chat import (
 from app.core.exceptions import VideoNotFoundError, VideoNotReadyError
 from app.services.chat_service import ChatService
 
+from app.core.rbac import get_current_user, enforce_tenant_access
+from app.db.models import User
+
 router = APIRouter(tags=["Chat"])
 chat_service = ChatService()
 
@@ -24,7 +27,8 @@ chat_service = ChatService()
 )
 async def chat_global_cross_video(
     payload: ChatRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Submit a query across all processed videos in the library.
@@ -34,6 +38,7 @@ async def chat_global_cross_video(
         video = await db.get(Video, payload.video_id)
         if not video:
             raise VideoNotFoundError(payload.video_id)
+        enforce_tenant_access(current_user, video.organization_id)
         if video.status != VideoStatus.COMPLETED:
             raise VideoNotReadyError(payload.video_id, video.status)
         return await chat_service.chat(
@@ -46,7 +51,8 @@ async def chat_global_cross_video(
         return await chat_service.chat_cross_video(
             db=db,
             query=payload.query,
-            session_id=payload.session_id
+            session_id=payload.session_id,
+            current_user=current_user
         )
 
 
@@ -58,7 +64,8 @@ async def chat_global_cross_video(
 async def chat_with_video(
     video_id: str,
     payload: ChatRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Submit a free-form question about the video.
@@ -68,6 +75,7 @@ async def chat_with_video(
     video = await db.get(Video, video_id)
     if not video:
         raise VideoNotFoundError(video_id)
+    enforce_tenant_access(current_user, video.organization_id)
 
     if video.status != VideoStatus.COMPLETED:
         raise VideoNotReadyError(video_id, video.status)

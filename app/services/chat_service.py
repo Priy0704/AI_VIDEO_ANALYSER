@@ -5,7 +5,7 @@ import io
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime
 import numpy as np
 from PIL import Image
@@ -167,17 +167,22 @@ class ChatService:
 
     async def get_or_create_session(self, db: AsyncSession, video_id: Optional[str], session_id: Optional[str]) -> ChatSession:
         if session_id:
-            cond = and_(ChatSession.id == session_id, ChatSession.video_id == video_id) if video_id else (ChatSession.id == session_id)
-            result = await db.execute(select(ChatSession).where(cond))
+            result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
             session = result.scalars().first()
             if session:
                 return session
 
         new_session = ChatSession(id=session_id, video_id=video_id) if session_id else ChatSession(video_id=video_id)
         db.add(new_session)
-        await db.flush()
-        await db.commit()
-        await db.refresh(new_session)
+        try:
+            await db.commit()
+            await db.refresh(new_session)
+        except Exception:
+            await db.rollback()
+            result = await db.execute(select(ChatSession).where(ChatSession.id == new_session.id))
+            session = result.scalars().first()
+            if session:
+                return session
         return new_session
 
     def extract_evidence_items_from_segment(
@@ -423,9 +428,26 @@ class ChatService:
         self,
         db: AsyncSession,
         query: str,
-        top_k: int = 12
+        top_k: int = 12,
+        current_user: Optional[Any] = None
     ) -> List[Tuple[VideoSegment, float, Video]]:
-        """Retrieve most relevant video segments across all completed videos in the library."""
+        """Retrieve most relevant video segments across all accessible completed videos in the library."""
+        filters = [Video.status == VideoStatus.COMPLETED]
+        if current_user:
+            from sqlalchemy import or_
+            user_role = getattr(current_user, "role", "analyst")
+            role_str = user_role.value if hasattr(user_role, "value") else str(user_role)
+            org_id = getattr(current_user, "organization_id", None)
+            usr_id = getattr(current_user, "id", None)
+
+            if org_id:
+                filters.append(or_(Video.organization_id == org_id, Video.organization_id.is_(None)))
+            
+            # If standard USER, filter to user's uploaded videos
+            if role_str in ["analyst", "user", "viewer"]:
+                if usr_id:
+                    filters.append(or_(Video.uploaded_by_user_id == usr_id, Video.uploaded_by_user_id.is_(None)))
+
         exact_time = self.parse_exact_timestamp(query)
         if exact_time is not None:
             t_start = max(0.0, exact_time - 20.0)
@@ -435,7 +457,7 @@ class ChatService:
                 .join(Video, VideoSegment.video_id == Video.id)
                 .where(
                     and_(
-                        Video.status == VideoStatus.COMPLETED,
+                        *filters,
                         VideoSegment.start_time <= t_end,
                         VideoSegment.end_time >= t_start
                     )
@@ -449,7 +471,7 @@ class ChatService:
         stmt = (
             select(VideoSegment, Video)
             .join(Video, VideoSegment.video_id == Video.id)
-            .where(Video.status == VideoStatus.COMPLETED)
+            .where(and_(*filters))
         )
         rows = (await db.execute(stmt)).all()
         if not rows:
@@ -753,16 +775,31 @@ class ChatService:
         self,
         db: AsyncSession,
         query: str,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        current_user: Optional[Any] = None
     ) -> ChatResponse:
         """
-        Process a global multi-video multimodal query searching across all completed videos.
+        Process a global multi-video multimodal query searching across all accessible completed videos.
         Produces the 4-part structured response: Answer, Evidence, Confidence, Reason.
         Handles conflicting evidence across modalities and multi-video subject tracking.
         """
         session = await self.get_or_create_session(db, None, session_id)
 
-        stmt_vids = select(Video).where(Video.status == VideoStatus.COMPLETED).order_by(Video.created_at.asc())
+        filters = [Video.status == VideoStatus.COMPLETED]
+        if current_user:
+            from sqlalchemy import or_
+            user_role = getattr(current_user, "role", "analyst")
+            role_str = user_role.value if hasattr(user_role, "value") else str(user_role)
+            org_id = getattr(current_user, "organization_id", None)
+            usr_id = getattr(current_user, "id", None)
+
+            if org_id:
+                filters.append(or_(Video.organization_id == org_id, Video.organization_id.is_(None)))
+            if role_str in ["analyst", "user", "viewer"]:
+                if usr_id:
+                    filters.append(or_(Video.uploaded_by_user_id == usr_id, Video.uploaded_by_user_id.is_(None)))
+
+        stmt_vids = select(Video).where(and_(*filters)).order_by(Video.created_at.asc())
         completed_videos = (await db.execute(stmt_vids)).scalars().all()
 
         if not completed_videos:
@@ -794,8 +831,8 @@ class ChatService:
 
         videos_analyzed = [v.filename for v in completed_videos]
 
-        # Retrieve relevant segments across all completed videos
-        scored_cross_segments = await self.retrieve_cross_video_segments(db, query, top_k=12)
+        # Retrieve relevant segments across all permitted completed videos
+        scored_cross_segments = await self.retrieve_cross_video_segments(db, query, top_k=12, current_user=current_user)
 
         # Extract multimodal evidence items
         all_evidence_items: List[MultimodalEvidenceItem] = []
@@ -1129,19 +1166,22 @@ class ChatService:
 
             system_prompt = (
                 "You are VideoIntel Copilot, an AI assistant built to help users understand video content quickly without watching the entire video.\n"
-                "Act like ChatGPT: understand the user's question, use the analyzed video's summary, transcript, OCR text, and visual descriptions as your primary knowledge source, and provide a clear, simple, concise, and helpful answer.\n\n"
+                "Act like ChatGPT: understand the user's question, use the analyzed video's summary, transcript, OCR text, and visual descriptions as your primary knowledge source, and provide a clear, simple, concise, and helpful answer in English.\n\n"
+                "MANDATORY MULTILINGUAL & ENGLISH TRANSLATION REQUIREMENT:\n"
+                "- If the video audio, dialogue, or spoken transcript is in Hindi, Marathi, Hinglish, or any regional/foreign language, YOU MUST AUTOMATICALLY TRANSLATE THE CONTENT AND ALWAYS WRITE YOUR ENTIRE ANSWER, EXPLANATION, SUMMARY, AND EVIDENCE IN CLEAR, NATURAL ENGLISH.\n"
+                "- Do NOT output answers in Devanagari Hindi or Marathi script unless the user explicitly requests answers in Hindi or Marathi.\n\n"
                 "MANDATORY MULTIMODAL VERIFICATION REQUIREMENT FOR ALL QUESTIONS:\n"
                 "For EVERY question (in both Single Video and All Videos modes):\n"
                 "1. Cross-verify ALL 3 knowledge layers: (a) Overall Video Summary, (b) Spoken Audio Transcript, and (c) Visual Scene Descriptions & On-Screen OCR Text.\n"
                 "2. Check for on-screen text, channel names (e.g. 'Pumpkin Family', 'Lumo Toons'), titles, and visual events that speakers may show visually without pronouncing out loud.\n"
-                "3. Deliver a neat, clean, well-grounded ChatGPT-style answer with embedded timestamp citations.\n\n"
+                "3. Deliver a neat, clean, well-grounded ChatGPT-style answer with embedded timestamp citations in English.\n\n"
                 f"{mode_instruction}\n"
                 "CRITICAL ANSWERING RULES:\n"
-                "1. DIRECT CONVERSATIONAL ANSWER: Answer the user's question directly in clear, natural language (like ChatGPT). Do NOT answer by merely listing timestamps (e.g. do NOT say 'Docker is discussed at 01:10, 01:30'). Provide the actual concept explanation or direct answer first!\n"
+                "1. DIRECT CONVERSATIONAL ANSWER IN ENGLISH: Answer the user's question directly in clear, natural English (like ChatGPT), translating any non-English audio dialogue accurately. Do NOT answer by merely listing timestamps (e.g. do NOT say 'Docker is discussed at 01:10, 01:30'). Provide the actual concept explanation or direct answer first!\n"
                 "2. SUPPORTING TIMESTAMPS: Use timestamps (e.g. 01:23 or 01:15–01:30) as supporting references embedded naturally in your text or cited in evidence, not as the main answer.\n"
                 "3. GENERAL / CONCEPT QUESTIONS (e.g. 'What is Docker?', 'Explain X'): Provide the clear definition/explanation taught in the video using the summary and transcript context. Do NOT require an exact timestamp match.\n"
                 "4. TIMESTAMP QUESTIONS (e.g. 'What happened at 02:30?'): Focus specifically on what occurred around that moment (±15–20 seconds).\n"
-                "5. SUMMARY QUESTIONS: Provide a cohesive, structured overview of the main topics and takeaways from the entire video.\n"
+                "5. SUMMARY QUESTIONS: Provide a cohesive, structured overview of the main topics and takeaways from the entire video in English.\n"
                 "6. VISUAL & ON-SCREEN TEXT QUESTIONS (e.g. channel names, titles, names, handles, logos, on-screen text):\n"
                 "   - Speakers often show YouTube channel pages, titles, website names, or subscriber counts on screen (e.g., 'Pumpkin Family', 'Lumo Toons') without pronouncing their full name out loud.\n"
                 "   - You MUST check the Visual Scene Descriptions and On-Screen OCR Text carefully for names, channel handles, titles, and metrics.\n"
@@ -1359,13 +1399,16 @@ class ChatService:
         if not distinct_facts and video_summary:
             distinct_facts.append(video_summary)
 
+        # Filter out generic keyframe placeholder strings if meaningful transcript/OCR facts are present
+        meaningful_facts = [f for f in distinct_facts if not f.lower().startswith("frame at ") and "keyframe extracted" not in f.lower()]
+        facts_to_use = meaningful_facts if meaningful_facts else distinct_facts
+
         # Build natural synthesized answer
-        if "docker" in q_lower:
-            answer_body = "Docker is demonstrated as a containerization platform. Key concepts include Docker Images (serving as static blueprints or class definitions) and Containers (running runtime instances). Video evidence documents: " + (" ".join(distinct_facts[:3]))
-        elif len(distinct_facts) >= 2:
-            answer_body = f"According to the video demonstration, {distinct_facts[0]}. Additionally, the footage shows {distinct_facts[1].lower()}."
-        elif len(distinct_facts) == 1:
-            answer_body = f"Based on the processed video content, {distinct_facts[0]}."
+        if facts_to_use:
+            if len(facts_to_use) >= 2:
+                answer_body = f"According to the video content, {facts_to_use[0]}. Additionally, {facts_to_use[1]}."
+            else:
+                answer_body = f"Based on the processed video content, {facts_to_use[0]}."
         else:
             answer_body = "The video demonstrates sequential concepts matching your search topic."
 
@@ -1381,7 +1424,7 @@ class ChatService:
             "Confidence:\n"
             "High\n\n"
             "Reason:\n"
-            "Grounded multimodal video evidence directly answering the query."
+            "Grounded multimodal video evidence directly matching the query."
         )
 
 

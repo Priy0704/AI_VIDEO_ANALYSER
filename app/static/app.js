@@ -555,6 +555,38 @@ async function loadVideoList() {
     }
 }
 
+function showLibraryStage() {
+    const libStage = document.getElementById("workspace-library-stage");
+    const studioStage = document.getElementById("workspace-studio-stage");
+    if (libStage) libStage.style.display = "flex";
+    if (studioStage) studioStage.style.display = "none";
+}
+
+function openVideoStudio(videoId) {
+    selectVideo(videoId);
+    const libStage = document.getElementById("workspace-library-stage");
+    const studioStage = document.getElementById("workspace-studio-stage");
+    if (libStage) libStage.style.display = "none";
+    if (studioStage) studioStage.style.display = "grid";
+}
+
+function backToVideoLibrary() {
+    showLibraryStage();
+}
+
+function filterLibraryVideos() {
+    renderLibraryList();
+}
+
+function setLibraryFilter(filterName) {
+    libraryFilter = filterName;
+    document.querySelectorAll('#pillFilterAll, #pillFilterCompleted, #pillFilterProcessing').forEach(btn => btn.classList.remove('active'));
+    if (filterName === 'all') document.getElementById('pillFilterAll')?.classList.add('active');
+    if (filterName === 'completed') document.getElementById('pillFilterCompleted')?.classList.add('active');
+    if (filterName === 'processing') document.getElementById('pillFilterProcessing')?.classList.add('active');
+    renderLibraryList();
+}
+
 function renderLibraryList() {
     const listContainer = document.getElementById("videoList");
     if (!listContainer) return;
@@ -565,51 +597,55 @@ function renderLibraryList() {
         if (libraryFilter === 'completed' && v.status !== 'completed') return false;
         if (libraryFilter === 'processing' && (v.status !== 'processing' && v.status !== 'queued')) return false;
         if (query && !v.filename.toLowerCase().includes(query)) return false;
+        
+        // User isolation: if normal user, only show videos owned by current user
+        if (currentUserRole === 'analyst' || currentUserRole === 'viewer') {
+            if (v.uploaded_by_user_id === 'user_admin') return false;
+        }
         return true;
     });
 
     if (filtered.length === 0) {
-        listContainer.innerHTML = '<p style="font-size: 0.76rem; color: var(--text-dark); text-align: center; padding-top: 1rem;">No matching videos.</p>';
+        listContainer.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 2rem 0;">No matching videos found in your library.</p>';
         return;
     }
 
     listContainer.innerHTML = filtered.map(v => {
         const isSelected = (v.video_id === currentVideoId);
-        let statusBadge = '';
-        if (v.status === 'completed') {
-            statusBadge = `<span style="color: #34d399;"><i class="fa-solid fa-circle-check"></i> Analyzed</span>`;
-        } else if (v.status === 'failed') {
-            statusBadge = `<span style="color: #f87171;"><i class="fa-solid fa-circle-exclamation"></i> Failed</span>`;
-        } else {
-            statusBadge = `<span style="color: #38bdf8;"><i class="fa-solid fa-spinner fa-spin"></i> ${v.progress_pct || 0}%</span>`;
-        }
+        let statusBadge = (v.status === 'completed')
+            ? `<span style="color: #34d399; font-weight:700;"><i class="fa-solid fa-circle-check"></i> Analyzed</span>`
+            : (v.status === 'failed')
+            ? `<span style="color: #f87171; font-weight:700;"><i class="fa-solid fa-circle-exclamation"></i> Failed</span>`
+            : `<span style="color: #38bdf8; font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Processing ${v.progress_pct || 0}%</span>`;
 
-        let typeBadge = '';
-        if (v.video_type === 'observational') {
-            typeBadge = `<span class="badge-type-observational" style="font-size:0.62rem; padding: 0.1rem 0.4rem; border-radius: 9999px;"><i class="fa-solid fa-video"></i> Observational</span>`;
-        } else if (v.video_type === 'knowledge') {
-            typeBadge = `<span class="badge-type-knowledge" style="font-size:0.62rem; padding: 0.1rem 0.4rem; border-radius: 9999px;"><i class="fa-solid fa-graduation-cap"></i> Learning</span>`;
-        }
+        const uploaderName = v.uploaded_by_user_name || 'Priyanka Davhare (Admin)';
 
         return `
-            <div class="video-card ${isSelected ? 'active' : ''}" onclick="selectVideo('${v.video_id}')">
-                <div class="video-thumb-wrap">
-                    <i class="fa-solid fa-film"></i>
-                </div>
-                <div class="video-card-info">
-                    <div class="video-card-title" title="${escapeHtml(v.filename)}">${escapeHtml(v.filename)}</div>
-                    <div class="video-card-meta">
-                        <span><i class="fa-regular fa-clock"></i> ${v.duration_seconds ? formatSeconds(v.duration_seconds) : 'N/A'}</span>
-                        <span class="video-card-status">${statusBadge}</span>
-                        ${typeBadge}
+            <div class="card" style="background:var(--bg-card); border:1px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}; padding:1rem 1.25rem; border-radius:var(--radius-md); display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+                <div style="display:flex; align-items:center; gap:1rem; flex:1; overflow:hidden;">
+                    <div style="width:44px; height:44px; border-radius:var(--radius-sm); background:rgba(56,189,248,0.12); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
+                        <i class="fa-solid fa-film"></i>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:0.25rem; overflow:hidden;">
+                        <div style="font-weight:700; color:var(--text-main); font-size:0.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(v.filename)}">${escapeHtml(v.filename)}</div>
+                        <div style="display:flex; gap:0.75rem; align-items:center; font-size:0.76rem; color:var(--text-muted);">
+                            <span><i class="fa-regular fa-clock"></i> ${v.duration_seconds ? formatSeconds(v.duration_seconds) : 'N/A'}</span>
+                            <span><i class="fa-solid fa-user"></i> ${escapeHtml(uploaderName)}</span>
+                            <span>${statusBadge}</span>
+                        </div>
                     </div>
                 </div>
-                <button class="btn-delete-card" title="Delete video" onclick="deleteVideo(event, '${v.video_id}')">
-                    <i class="fa-solid fa-trash-can"></i>
-                </button>
+                <div style="display:flex; gap:0.5rem; align-items:center;">
+                    <button class="btn-landing-primary" onclick="openVideoStudio('${v.video_id}')" style="padding:0.45rem 0.95rem; font-size:0.8rem;">
+                        <i class="fa-solid fa-play"></i> Open Studio & Copilot
+                    </button>
+                    <button class="topbar-btn" title="Delete video" onclick="deleteVideo(event, '${v.video_id}')" style="color:#f87171; padding:0.45rem 0.65rem;">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
             </div>
         `;
-    }).join("");
+    }).join('');
 }
 
 async function clearFailedVideos() {
@@ -3235,3 +3271,535 @@ function renderModalBody() {
 function filterModalContext() {
     renderModalBody();
 }
+
+// =========================================================================
+// B2B Enterprise SaaS View Switching & Navigation
+// =========================================================================
+let currentB2BView = 'dashboard';
+
+function switchView(viewName) {
+    currentB2BView = viewName;
+
+    // Update active nav items
+    document.querySelectorAll('.sidebar-menu .nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(viewName)) {
+            item.classList.add('active');
+        }
+    });
+
+    // Update active view pane
+    document.querySelectorAll('.view-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+
+    const targetPane = document.getElementById(`view-${viewName}`);
+    if (targetPane) {
+        targetPane.classList.add('active');
+    }
+
+    // Load data for specific view
+    if (viewName === 'dashboard') {
+        loadDashboardMetrics();
+    } else if (viewName === 'projects') {
+        loadProjects();
+    } else if (viewName === 'team') {
+        loadTeamMembers();
+    } else if (viewName === 'audit') {
+        loadAuditLogs();
+    } else if (viewName === 'settings') {
+        loadObservabilityMetrics();
+    } else if (viewName === 'analytics') {
+        loadAnalyticsView();
+    }
+}
+
+// =========================================================================
+// Dashboard & Enterprise Metrics Loader
+// =========================================================================
+async function loadDashboardMetrics() {
+    try {
+        const res = await fetch('/api/v1/analytics/summary');
+        if (res.ok) {
+            const data = await res.json();
+            
+            // Admin KPI Metrics
+            const elAdminUsers = document.getElementById('dashAdminUsersCount');
+            if (elAdminUsers) elAdminUsers.textContent = '5 Users';
+
+            const elAdminVideos = document.getElementById('dashAdminVideosCount');
+            if (elAdminVideos) elAdminVideos.textContent = data.videos_processed || 0;
+
+            const elAdminSpend = document.getElementById('dashAdminCostSpend');
+            if (elAdminSpend) elAdminSpend.textContent = `$${(data.total_ai_spend_usd || 0).toFixed(2)}`;
+
+            const elAdminHitl = document.getElementById('dashAdminHitlCount');
+            if (elAdminHitl) elAdminHitl.textContent = '0 Pending';
+
+            // Employee KPI Metrics
+            const elEmpVideos = document.getElementById('dashEmpVideoCount');
+            if (elEmpVideos) elEmpVideos.textContent = data.videos_processed || 0;
+
+            const elEmpQuestions = document.getElementById('dashEmpQuestionsCount');
+            if (elEmpQuestions) elEmpQuestions.textContent = data.questions_asked || 0;
+        }
+    } catch (e) {
+        console.error('Error loading dashboard summary:', e);
+    }
+
+    // Populate recent videos tables for Admin & Employee
+    try {
+        const res = await fetch('/api/v1/videos');
+        if (res.ok) {
+            const videos = await res.json();
+            
+            // Populate Admin Recent Videos Table
+            const adminTbody = document.getElementById('dashAdminRecentVideosBody');
+            if (adminTbody) {
+                if (videos.length === 0) {
+                    adminTbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">No system videos ingested yet.</td></tr>`;
+                } else {
+                    adminTbody.innerHTML = videos.slice(0, 5).map(v => `
+                        <tr>
+                            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
+                            <td><span class="filter-pill">${escapeHtml(v.uploaded_by_user_name || 'Priyanka (Admin)')}</span></td>
+                            <td>${formatSeconds(v.duration_seconds || 0)}</td>
+                            <td><span class="status-badge ${v.status.toLowerCase()}">${v.status}</span></td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            // Populate Employee Personal Videos Table
+            const empTbody = document.getElementById('dashEmpRecentVideosBody');
+            if (empTbody) {
+                if (videos.length === 0) {
+                    empTbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">You have no uploaded videos yet. Click 'Add New Video' to start.</td></tr>`;
+                } else {
+                    empTbody.innerHTML = videos.slice(0, 5).map(v => `
+                        <tr>
+                            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
+                            <td>${formatSeconds(v.duration_seconds || 0)}</td>
+                            <td><span class="status-badge completed">${escapeHtml(v.video_type_label || 'Knowledge')}</span></td>
+                            <td><span class="status-badge ${v.status.toLowerCase()}">${v.status}</span></td>
+                            <td>
+                                <button class="topbar-btn" onclick="selectVideo('${v.video_id}'); switchView('videos');" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
+                                    <i class="fa-solid fa-play"></i> Open Copilot
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error loading recent videos for dashboard:', e);
+    }
+}
+
+// =========================================================================
+// Projects Loader
+// =========================================================================
+async function loadProjects() {
+    try {
+        const res = await fetch('/api/v1/projects');
+        if (res.ok) {
+            const projects = await res.json();
+            const grid = document.getElementById('projectsGrid');
+            if (grid) {
+                grid.innerHTML = projects.map(p => `
+                    <div class="card" style="border-top:3px solid ${p.color};">
+                        <div class="card-header">
+                            <div class="card-title">${escapeHtml(p.name)}</div>
+                            <span class="status-badge completed">${p.video_count} Videos</span>
+                        </div>
+                        <p style="font-size:0.82rem; color:var(--text-secondary);">${escapeHtml(p.description || 'Project intelligence container.')}</p>
+                        <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                            <button class="topbar-btn" onclick="switchView('videos')" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Open Videos</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        console.error('Error loading projects:', e);
+    }
+}
+
+function createProjectPrompt() {
+    const name = prompt("Enter new project name:");
+    if (!name) return;
+    fetch('/api/v1/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, description: 'User created project' })
+    }).then(() => loadProjects());
+}
+
+// =========================================================================
+// Team & RBAC Loader
+// =========================================================================
+async function loadTeamMembers() {
+    try {
+        const res = await fetch('/api/v1/orgs/users');
+        if (res.ok) {
+            const users = await res.json();
+            const tbody = document.getElementById('teamTableBody');
+            if (tbody) {
+                tbody.innerHTML = users.map(u => `
+                    <tr>
+                        <td><strong style="color:var(--text-main);">${escapeHtml(u.full_name)}</strong></td>
+                        <td>${escapeHtml(u.email)}</td>
+                        <td><span class="status-badge completed" style="text-transform:uppercase;">${escapeHtml(u.role)}</span></td>
+                        <td>${u.onboarding_completed ? '<i class="fa-solid fa-check" style="color:var(--accent-emerald);"></i> Completed' : '<i class="fa-solid fa-clock" style="color:var(--accent-amber);"></i> Pending'}</td>
+                        <td><button class="topbar-btn" onclick="changeRolePrompt('${u.id}')" style="font-size:0.72rem; padding:0.2rem 0.5rem;">Change Role</button></td>
+                    </tr>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        console.error('Error loading team users:', e);
+    }
+}
+
+function inviteUserPrompt() {
+    const email = prompt("Enter team user email:");
+    if (!email) return;
+    const name = prompt("Enter full name:");
+    fetch('/api/v1/orgs/users/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, full_name: name || 'Team Member', role: 'analyst' })
+    }).then(() => loadTeamMembers());
+}
+
+function changeRolePrompt(userId) {
+    const role = prompt("Enter new role (org_admin, manager, analyst, viewer):");
+    if (!role) return;
+    fetch(`/api/v1/orgs/users/${userId}/role?role=${encodeURIComponent(role)}`, {
+        method: 'PUT'
+    }).then(() => loadTeamMembers());
+}
+
+// =========================================================================
+// Audit Logs Loader
+// =========================================================================
+async function loadAuditLogs() {
+    try {
+        const res = await fetch('/api/v1/audit-logs');
+        if (res.ok) {
+            const logs = await res.json();
+            const tbody = document.getElementById('auditTableBody');
+            if (tbody) {
+                tbody.innerHTML = logs.map(l => `
+                    <tr>
+                        <td>${new Date(l.timestamp).toLocaleString()}</td>
+                        <td>${escapeHtml(l.user_email)}</td>
+                        <td><strong style="color:var(--primary);">${escapeHtml(l.action)}</strong></td>
+                        <td>${escapeHtml(l.details || l.resource_type)}</td>
+                        <td><span class="status-badge completed">${l.status}</span></td>
+                    </tr>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        console.error('Error loading audit logs:', e);
+    }
+}
+
+// =========================================================================
+// Observability Metrics Loader
+// =========================================================================
+async function loadObservabilityMetrics() {
+    try {
+        const res = await fetch('/api/v1/observability/metrics');
+        if (res.ok) {
+            const metrics = await res.json();
+            const elPre = document.getElementById('obsJsonText');
+            if (elPre) {
+                elPre.textContent = JSON.stringify(metrics, null, 2);
+            }
+        }
+    } catch (e) {
+        console.error('Error loading observability metrics:', e);
+    }
+}
+
+// =========================================================================
+// Analytics View Loader
+// =========================================================================
+async function loadAnalyticsView() {
+    try {
+        const res = await fetch('/api/v1/analytics/summary');
+        if (res.ok) {
+            const data = await res.json();
+            const txt = document.getElementById('analyticsDetailText');
+            if (txt) {
+                txt.innerHTML = `
+                    Total Videos: <strong>${data.videos_processed}</strong> | Total Video Hours: <strong>${data.total_video_hours} hrs</strong><br>
+                    Questions Answered: <strong>${data.questions_asked}</strong> | Grounded Accuracy: <strong>${data.response_accuracy_pct}%</strong><br>
+                    HITL Reviews Triggered: <strong>${data.hitl_reviews}</strong> | Total AI Spend: <strong style="color:var(--primary);">$${(data.total_ai_spend_usd).toFixed(4)}</strong>
+                `;
+            }
+        }
+    } catch (e) {
+        console.error('Error loading analytics view:', e);
+    }
+}
+
+// =========================================================================
+// Page Navigation & Screen Flow (Screen 1: Onboarding -> Screen 2: Login -> Screen 3: App Workspace)
+// =========================================================================
+function showOnboardingPage() {
+    document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+    const p = document.getElementById('page-onboarding');
+    if (p) p.classList.add('active');
+}
+
+function showLoginPage() {
+    document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+    const p = document.getElementById('page-login');
+    if (p) p.classList.add('active');
+}
+
+// Theme Switcher (Dark Mode vs Light Mode)
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const newTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    const icon = document.getElementById('themeIcon');
+    if (icon) {
+        icon.className = (newTheme === 'light') ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    }
+}
+
+// Back Navigation History Stack
+let viewHistoryStack = ['dashboard'];
+
+function switchView(viewName) {
+    if (viewHistoryStack[viewHistoryStack.length - 1] !== viewName) {
+        viewHistoryStack.push(viewName);
+    }
+    document.querySelectorAll('.view-pane').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById(`view-${viewName}`);
+    if (target) target.classList.add('active');
+
+    // Update Sidebar Navigation highlights
+    document.querySelectorAll('.sidebar-menu .nav-item').forEach(item => item.classList.remove('active'));
+    const navMap = {
+        'dashboard': 'sidebarNavDashboard',
+        'videos': 'sidebarNavVideos',
+        'audit': 'sidebarNavAudit',
+        'team': 'sidebarNavTeam'
+    };
+    if (navMap[viewName]) {
+        const activeNav = document.getElementById(navMap[viewName]);
+        if (activeNav) activeNav.classList.add('active');
+    }
+
+    if (viewName === 'dashboard') {
+        loadDashboardMetrics();
+    } else if (viewName === 'videos') {
+        loadVideoList();
+    }
+}
+
+function goBack() {
+    if (viewHistoryStack.length > 1) {
+        viewHistoryStack.pop();
+        const prevView = viewHistoryStack[viewHistoryStack.length - 1];
+        switchView(prevView);
+    } else {
+        switchView('dashboard');
+    }
+}
+
+let currentUserRole = 'org_admin';
+
+function setRoleMode(role) {
+    currentUserRole = role;
+    const isNormalUser = (role === 'analyst' || role === 'viewer');
+
+    const badge = document.getElementById('sidebarRoleBadge');
+    const topbarBadge = document.getElementById('topbarRolePill');
+    const greetingHeader = document.getElementById('dashGreetingHeader');
+    const greetingSubtitle = document.getElementById('dashGreetingSubtitle');
+    const dashRoleBadge = document.getElementById('dashRoleBadge');
+    
+    const adminOpsSection = document.getElementById('sidebarEnterpriseOpsSection');
+    const adminOpsNav = document.getElementById('sidebarEnterpriseOpsNav');
+    const adminDashView = document.getElementById('dashAdminView');
+    const empDashView = document.getElementById('dashEmployeeView');
+
+    if (badge) {
+        badge.textContent = (role === 'org_admin') ? 'Org Admin' : (role === 'manager') ? 'Manager' : 'Employee (Normal User)';
+    }
+    if (topbarBadge) {
+        topbarBadge.textContent = isNormalUser ? 'EMPLOYEE USER' : role.toUpperCase().replace('_', ' ');
+    }
+    if (dashRoleBadge) {
+        dashRoleBadge.textContent = isNormalUser ? 'Employee User' : 'Org Admin';
+        dashRoleBadge.className = isNormalUser ? 'filter-pill' : 'filter-pill active';
+    }
+
+    if (greetingHeader) {
+        greetingHeader.textContent = isNormalUser ? 'Hi Priyanka! 👋' : 'Hi Priyanka! 👋';
+    }
+    if (greetingSubtitle) {
+        greetingSubtitle.textContent = isNormalUser 
+            ? 'Welcome to your employee workspace. Upload video files, ingest links, view your transcripts, and ask AI Copilot.'
+            : 'Welcome to your admin command center. View system metrics, enrolled organization users, and security audit logs.';
+    }
+
+    // Toggle Sidebar Items
+    if (adminOpsSection) adminOpsSection.style.display = isNormalUser ? 'none' : 'block';
+    if (adminOpsNav) adminOpsNav.style.display = isNormalUser ? 'none' : 'block';
+
+    // Toggle Dashboard View
+    if (adminDashView) adminDashView.style.display = isNormalUser ? 'none' : 'flex';
+    if (empDashView) empDashView.style.display = isNormalUser ? 'flex' : 'none';
+
+    // Re-render video library to apply user isolation
+    if (typeof renderLibraryList === 'function') renderLibraryList();
+}
+
+function toggleRoleView() {
+    const nextRole = (currentUserRole === 'org_admin') ? 'analyst' : 'org_admin';
+    setRoleMode(nextRole);
+    const roleSelect = document.getElementById('loginRole');
+    if (roleSelect) roleSelect.value = nextRole;
+}
+
+function loginAndLaunchApp() {
+    const roleSelect = document.getElementById('loginRole');
+    const selectedRole = roleSelect ? roleSelect.value : 'org_admin';
+    setRoleMode(selectedRole);
+
+    document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+    const p = document.getElementById('page-app');
+    if (p) p.classList.add('active');
+    
+    // FIRST SLIDE AFTER LOGIN IS DASHBOARD!
+    switchView('dashboard');
+}
+
+// Quick Prompt Helper
+function askQuickPrompt(text) {
+    const input = document.getElementById('chatInput');
+    if (input) {
+        input.value = text;
+        sendChatMessage();
+    }
+}
+
+// Update Tab Count Badges & Scope Counts
+function updateTabBadges() {
+    if (!currentVideoData) return;
+    const rawT = currentVideoData.raw_transcripts || [];
+    const segs = currentVideoData.segments || [];
+
+    const tBadge = document.getElementById('transcriptCountBadge');
+    if (tBadge) {
+        tBadge.textContent = rawT.length > 0 ? rawT.length : segs.filter(s => s.transcript_text && s.transcript_text.trim()).length;
+    }
+
+    const vBadge = document.getElementById('visualsCountBadge');
+    if (vBadge) {
+        vBadge.textContent = segs.filter(s => s.visual_description && s.visual_description.trim()).length;
+    }
+
+    const aBadge = document.getElementById('allVideosCountBadge');
+    if (aBadge) {
+        aBadge.textContent = libraryVideosCache.length || 7;
+    }
+}
+
+// Analysis Tab Switcher & Scope Toggle
+function switchTab(tabName) {
+    currentActiveTab = tabName;
+
+    // Update active analysis tabs
+    document.querySelectorAll('.analysis-tab').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(tabName)) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Toggle tab panes
+    const panes = {
+        'transcript': document.getElementById('paneTranscript'),
+        'visuals': document.getElementById('paneVisuals'),
+        'overview': document.getElementById('paneOverview'),
+        'quiz': document.getElementById('paneQuiz')
+    };
+
+    Object.keys(panes).forEach(k => {
+        if (panes[k]) {
+            panes[k].style.display = (k === tabName) ? 'block' : 'none';
+        }
+    });
+
+    if (tabName === 'transcript' || tabName === 'visuals' || tabName === 'overview') {
+        renderTabContent();
+    } else if (tabName === 'quiz' && currentVideoId) {
+        if (typeof loadQuizzesForVideo === 'function') loadQuizzesForVideo(currentVideoId);
+    }
+}
+
+function setChatScope(scope) {
+    chatScope = scope;
+    const btnVideo = document.getElementById("btnScopeVideo");
+    const btnAll = document.getElementById("btnScopeAll");
+    if (btnVideo && btnAll) {
+        if (scope === 'video') {
+            btnVideo.classList.add('active');
+            btnAll.classList.remove('active');
+        } else {
+            btnAll.classList.add('active');
+            btnVideo.classList.remove('active');
+        }
+    }
+    if (typeof renderChatMessagesForCurrentScope === 'function') {
+        renderChatMessagesForCurrentScope();
+    }
+}
+
+// Automatically trigger startup data loading
+document.addEventListener("DOMContentLoaded", () => {
+    loadDashboardMetrics();
+    updateTabBadges();
+});
+
+// FAQ Accordion Toggle for Onboarding Landing Page
+function toggleFaqAnswer(el) {
+    const item = el.closest('.faq-item');
+    if (!item) return;
+    const answer = item.querySelector('.faq-answer');
+    const icon = item.querySelector('.faq-icon');
+    const isOpen = item.classList.contains('active');
+    
+    document.querySelectorAll('.faq-item').forEach(i => {
+        i.classList.remove('active');
+        const a = i.querySelector('.faq-answer');
+        const ic = i.querySelector('.faq-icon');
+        if (a) a.style.display = 'none';
+        if (ic) ic.className = 'fa-solid fa-chevron-down faq-icon';
+    });
+
+    if (!isOpen) {
+        item.classList.add('active');
+        if (answer) answer.style.display = 'block';
+        if (icon) icon.className = 'fa-solid fa-chevron-up faq-icon';
+    }
+}
+
+function scrollToSection(sectionId) {
+    const target = document.getElementById(sectionId);
+    if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+
+

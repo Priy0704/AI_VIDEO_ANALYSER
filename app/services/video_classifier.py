@@ -167,32 +167,43 @@ class VideoClassifier:
         fn_lower = filename.lower()
         total_transcript_words = sum(len(t.split()) for t in transcripts)
 
-        # 1. High-Priority Filename Pattern Rules for CCTV / Surveillance
+        # 1. High-Priority Filename Pattern Rules for CCTV / Surveillance (specific multi-word indicators, avoid bare 'cam')
         cctv_filename_keywords = [
-            "cctv", "surveillance", "security", "dashcam", "traffic", "gate",
-            "corridor", "hallway", "parking", "patrol", "entrance", "exit", "cam"
+            "cctv", "surveillance", "dashcam", "security_camera", "traffic_camera",
+            "parking_lot", "corridor_cam", "stairwell_cam", "entrance_cam", "patrol_cam"
         ]
         if any(kw in fn_lower for kw in cctv_filename_keywords):
             return VideoClassificationResult(
                 video_type="observational",
                 label="Observational / Surveillance",
                 confidence=0.98,
-                reason=f"Filename '{filename}' contains CCTV or surveillance camera indicators."
+                reason=f"Filename '{filename}' contains explicit CCTV or surveillance camera indicators."
             )
 
-        # 2. Duration & Audio Rules
+        # 2. Educational & Learning Filename Keywords
         learning_filename_keywords = [
             "lecture", "tutorial", "presentation", "course", "webinar",
-            "lesson", "education", "training", "saksham", "moodle", "guide"
+            "lesson", "education", "training", "saksham", "moodle", "guide",
+            "learn", "how", "what", "explain", "python", "docker", "ai", "kaise",
+            "banaye", "concept", "code", "programming", "developer", "overview"
         ]
         has_learning_filename = any(kw in fn_lower for kw in learning_filename_keywords)
 
-        if 0 < duration_seconds < 60.0 and not has_learning_filename:
+        if has_learning_filename or total_transcript_words > 15:
+            return VideoClassificationResult(
+                video_type="knowledge",
+                label="Learning / Knowledge Content",
+                confidence=0.94,
+                reason="Educational filename indicators or spoken instructional dialogue detected."
+            )
+
+        # 3. Only classify short videos as observational if they lack transcript AND lack educational keywords
+        if 0 < duration_seconds < 60.0 and total_transcript_words == 0 and not has_learning_filename:
             return VideoClassificationResult(
                 video_type="observational",
                 label="Observational / Surveillance",
-                confidence=0.96,
-                reason=f"Video duration ({int(round(duration_seconds))}s) is under 1 minute without educational indicators."
+                confidence=0.92,
+                reason=f"Short clip ({int(round(duration_seconds))}s) lacking spoken dialogue or educational content."
             )
 
         combined_text = (
@@ -205,9 +216,9 @@ class VideoClassifier:
 
         observational_terms = [
             "cctv", "surveillance", "security camera", "security footage", "dashcam",
-            "traffic camera", "parking lot", "entrance gate", "corridor", "camera",
-            "cam1", "cam2", "monitoring", "facility camera", "night vision",
-            "patrol", "perimeter", "stairwell camera", "static camera", "overhead", "footage"
+            "traffic camera", "parking lot", "entrance gate", "corridor", "monitoring",
+            "facility camera", "night vision", "patrol", "perimeter", "stairwell camera",
+            "static camera", "overhead"
         ]
 
         knowledge_terms = [
@@ -215,30 +226,28 @@ class VideoClassifier:
             "explaining", "learn", "how to", "architecture", "dashboard", "diagram",
             "slide", "speaker", "instructor", "lesson", "education", "conference",
             "interview", "overview", "demo", "system", "saksham", "moodle", "algorithm",
-            "code", "framework", "database", "rag", "embeddings", "model"
+            "code", "framework", "database", "rag", "embeddings", "model", "kaise", "banaye", "python"
         ]
 
         obs_score = sum(1 for term in observational_terms if term in combined_text)
         know_score = sum(1 for term in knowledge_terms if term in combined_text)
 
-        if total_transcript_words > 30:
-            know_score += 4
-        elif total_transcript_words == 0:
-            obs_score += 4
+        if total_transcript_words > 20:
+            know_score += 5
 
-        if obs_score >= know_score or (total_transcript_words == 0 and not has_learning_filename):
+        if obs_score > know_score and total_transcript_words == 0 and not has_learning_filename:
             return VideoClassificationResult(
                 video_type="observational",
                 label="Observational / Surveillance",
                 confidence=0.92,
-                reason="Absence of spoken dialogue or presence of observational visual markers."
+                reason="Presence of CCTV/observational visual markers and complete absence of spoken dialogue."
             )
         else:
             return VideoClassificationResult(
                 video_type="knowledge",
                 label="Learning / Knowledge Content",
-                confidence=0.88,
-                reason="Instructional spoken dialogue or educational presentation topics detected."
+                confidence=0.90,
+                reason="Instructional content, educational topics, or spoken dialogue detected."
             )
 
 

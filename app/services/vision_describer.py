@@ -66,34 +66,45 @@ class VisionDescriber:
                         "MANDATORY EXTRACTION INSTRUCTIONS:\n"
                         "1. FULL OCR & ON-SCREEN TEXT: Transcribe and extract ALL visible text, presentation slides, headers, bullet points, footers, website URLs, software UI labels, subscriber counts, metrics, and logos.\n"
                         "2. EXTRACT ALL NAMES VERBATIM: If there are names of people, faculty, mentors, presenters, speakers, attendees, singers, or participants shown anywhere on screen, LIST EVERY SINGLE NAME VERBATIM. Never summarize as 'a list of names'.\n"
-                        "3. DEEP BACKGROUND & VISUAL CONTEXT: Describe background elements, room setting (office, stage, classroom, outdoors, studio), lighting, furniture, items on tables or walls, background people, clothing colors/style, and physical actions/gestures.\n"
+                        "3. DEEP BACKGROUND & VISUAL CONTEXT: Describe background elements, room setting (office, stage, classroom, outdoors, studio, street, vehicles), lighting, furniture, items, background people, clothing, and physical actions/gestures accurately. Do not invent details.\n"
                         "4. SCREEN & DISPLAY DETAILS: If a monitor, television, computer screen, or presentation is visible, describe its exact contents, layout, open tabs, subscriber counts, and UI elements.\n"
                         "5. SONG & MEDIA TITLES: If song titles, music credits, or video titles are visible, state them verbatim.\n\n"
                         "Output format for EACH frame:\n"
                         "[FRAME: <timestamp>s]\n"
                         "Headline: <One concise sentence summarizing the main visual scene, slide topic, or action>\n"
-                        "Details: <2-3 sentences describing the people, attire, setting, background elements, screen contents, actions, and atmosphere>\n"
+                        "Details: <2-3 sentences describing what is physically visible in the frame>\n"
                         "Visible Text & Names: <List all visible text, slide titles, bullet points, subscriber counts, and names verbatim. If none, write 'None'>\n\n"
                         "Example:\n"
                         "[FRAME: 24.0s]\n"
-                        "Headline: Slide displays faculty members and mentors of the program.\n"
-                        "Details: Presentation slide showing two columns of faculty and mentor names under Harbinger Group branding. The presenter in navy blue polo stands in front of a conference room wall.\n"
-                        "Visible Text & Names: Slide title: 'Faculty members and mentors of the program-'. Names: Adhiraj Gadgil, Aditya Kulkarni, Amit A Kulkarni, Anu Riswadkar, Anuradha Apte."
+                        "Headline: Scene shows key visual elements and activities in the video frame.\n"
+                        "Details: Visual keyframe captured from the video showing scene context and physical setting.\n"
+                        "Visible Text & Names: None"
                     )
 
                     batch_desc = None
                     for model_name in candidate_models:
-                        try:
-                            model = genai.GenerativeModel(model_name)
-                            response = await asyncio.wait_for(
-                                asyncio.to_thread(model.generate_content, [prompt] + images),
-                                timeout=40.0
-                            )
-                            if response and response.text:
-                                batch_desc = response.text.strip()
-                                break
-                        except Exception as err:
-                            logger.warning(f"Batch {batch_idx+1} vision model {model_name} failed: {err}")
+                        for attempt in range(3):
+                            try:
+                                model = genai.GenerativeModel(model_name)
+                                response = await asyncio.wait_for(
+                                    asyncio.to_thread(model.generate_content, [prompt] + images),
+                                    timeout=45.0
+                                )
+                                if response and response.text:
+                                    batch_desc = response.text.strip()
+                                    break
+                            except Exception as err:
+                                err_str = str(err).lower()
+                                if "429" in err_str or "quota" in err_str or "rate limit" in err_str:
+                                    logger.warning(f"Batch {batch_idx+1} model {model_name} rate limited (429). Retrying in 4s (attempt {attempt+1}/3)...")
+                                    await asyncio.sleep(4.0)
+                                else:
+                                    if "401" in err_str or "invalid authentication" in err_str:
+                                        logger.warning(f"Gemini API key authentication failed (401). Check GEMINI_API_KEY in .env.")
+                                    logger.warning(f"Batch {batch_idx+1} vision model {model_name} failed: {err}")
+                                    break
+                        if batch_desc:
+                            break
 
                     if batch_desc:
                         parsed_blocks = self._parse_frame_blocks(batch_desc, batch)
@@ -117,13 +128,13 @@ class VisionDescriber:
                         )
                     return observations
             except Exception as e:
-                logger.error(f"Batched Gemini visual perception failed: {e}. Falling back.")
+                logger.error(f"Batched Gemini visual perception failed: {e}. Falling back to visual frame analysis.")
 
-        # Offline / Fallback baseline
+        # Computer Vision & Offline Fallback Baseline
         return [
             VisualObservation(
                 timestamp=s.timestamp,
-                description=self._offline_frame_description(s.timestamp),
+                description=self._cv_frame_description(s),
                 ocr_text=""
             )
             for s in frame_samples
@@ -180,9 +191,37 @@ class VisionDescriber:
 
         return result
 
-    def _offline_frame_description(self, timestamp: float) -> str:
-        """Contextual fallback description when visual API is unavailable or for testing."""
-        return (
-            f"Frame at {timestamp:.1f}s: A presenter in dark navy blue polo shirt and trousers gestures towards the display screen showing slides.\n"
-            f"Visible in the room are attendees, display monitors, and presentation materials."
-        )
+    def _cv_frame_description(self, sample: FrameSample) -> str:
+        """Computer Vision fallback analysis using OpenCV and PIL image properties."""
+        ts = sample.timestamp
+        img_path = Path(sample.image_path) if sample.image_path else None
+        
+        if img_path and img_path.exists():
+            try:
+                import cv2
+                import numpy as np
+                img_bgr = cv2.imread(str(img_path))
+                if img_bgr is not None:
+                    h, w, _ = img_bgr.shape
+                    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+                    brightness = float(np.mean(gray))
+                    edges = cv2.Canny(gray, 100, 200)
+                    edge_density = float(np.mean(edges > 0))
+
+                    lighting = (
+                        "Night vision or low-light scene setting" if brightness < 70
+                        else ("High-brightness presentation screen or brightly lit environment" if brightness > 175
+                        else "Daytime outdoor ambient illumination")
+                    )
+                    complexity = (
+                        "High visual detail and dynamic activity in frame" if edge_density > 0.05
+                        else "Moderate visual structures and background elements"
+                    )
+                    return (
+                        f"Headline: Keyframe visual capture at {ts:.1f}s.\n"
+                        f"Details: Scene dimensions: {w}x{h}px. {lighting} with {complexity.lower()}."
+                    )
+            except Exception as e:
+                logger.debug(f"CV analysis error: {e}")
+
+        return f"Headline: Visual frame at {ts:.1f}s.\nDetails: Keyframe image sequence captured from video timeline."

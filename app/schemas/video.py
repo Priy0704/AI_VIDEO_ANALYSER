@@ -27,6 +27,13 @@ class VideoStatusResponse(BaseModel):
     video_type_label: Optional[str] = "Learning / Knowledge Content"
     video_type_confidence: Optional[float] = 0.90
     video_type_reason: Optional[str] = None
+    organization_id: Optional[str] = None
+    project_id: Optional[str] = None
+    uploaded_by_user_id: Optional[str] = None
+    uploaded_by_user_name: Optional[str] = None
+    estimated_cost: Optional[float] = 0.0
+    actual_cost: Optional[float] = 0.0
+    stage_timings_json: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -57,6 +64,11 @@ class VideoDetailResponse(BaseModel):
     video_type_label: Optional[str] = "Learning / Knowledge Content"
     video_type_confidence: Optional[float] = 0.90
     video_type_reason: Optional[str] = None
+    organization_id: Optional[str] = None
+    project_id: Optional[str] = None
+    estimated_cost: Optional[float] = 0.0
+    actual_cost: Optional[float] = 0.0
+    stage_timings_json: Optional[dict] = None
     raw_transcripts: Optional[List[TranscriptUtterance]] = []
     created_at: datetime
     segments_count: int = 0

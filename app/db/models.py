@@ -19,6 +19,134 @@ import enum
 Base = declarative_base()
 
 
+class UserRole(str, enum.Enum):
+    ORG_ADMIN = "org_admin"
+    MANAGER = "manager"
+    ANALYST = "analyst"
+    VIEWER = "viewer"
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    status = Column(String(50), nullable=False, default="active")
+    plan = Column(String(50), nullable=False, default="Enterprise")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    workspaces = relationship("Workspace", back_populates="organization", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
+    projects = relationship("Project", back_populates="organization", cascade="all, delete-orphan")
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization", back_populates="workspaces")
+    projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    full_name = Column(String(255), nullable=False)
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.ANALYST)
+    status = Column(String(50), nullable=False, default="active")
+    onboarding_completed = Column(Integer, nullable=False, default=0) # 0=pending, 1=completed
+    use_case = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization", back_populates="users")
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    color = Column(String(30), nullable=False, default="#38bdf8")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization", back_populates="projects")
+    workspace = relationship("Workspace", back_populates="projects")
+    videos = relationship("Video", back_populates="project")
+
+
+class ProcessingCostRecord(Base):
+    __tablename__ = "processing_cost_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    video_id = Column(String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), nullable=True)
+    model = Column(String(100), nullable=False, default="gemini-1.5-flash")
+    processing_stage = Column(String(100), nullable=False)
+    input_tokens = Column(BigInteger, nullable=False, default=0)
+    output_tokens = Column(BigInteger, nullable=False, default=0)
+    cached_tokens = Column(BigInteger, nullable=False, default=0)
+    ai_calls_count = Column(Integer, nullable=False, default=1)
+    estimated_cost = Column(Float, nullable=False, default=0.0)
+    actual_cost = Column(Float, nullable=False, default=0.0)
+    cost_breakdown_json = Column(JSON, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False, index=True)  # e.g., "video.upload", "user.role_change"
+    resource_type = Column(String(100), nullable=False)  # e.g., "video", "user", "project"
+    resource_id = Column(String(100), nullable=True)
+    details = Column(Text, nullable=True)
+    ip_address = Column(String(45), nullable=True, default="127.0.0.1")
+    status = Column(String(20), nullable=False, default="success")  # "success", "failed"
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_configs"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SystemMetric(Base):
+    __tablename__ = "system_metrics"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    metric_name = Column(String(100), nullable=False, index=True)
+    metric_value = Column(Float, nullable=False)
+    tags = Column(JSON, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class VideoStatus(str, enum.Enum):
     QUEUED = "queued"
     PROCESSING = "processing"
@@ -37,6 +165,11 @@ class Video(Base):
     __tablename__ = "videos"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    uploaded_by_user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
     filename = Column(String(255), nullable=False)
     file_path = Column(String(1024), nullable=False)
     file_size_bytes = Column(BigInteger, nullable=False, default=0)
@@ -51,10 +184,17 @@ class Video(Base):
     video_type_label = Column(String(100), nullable=True, default="Learning / Knowledge Content")
     video_type_confidence = Column(Float, nullable=True, default=0.90)
     video_type_reason = Column(Text, nullable=True)
+    
+    # Cost & Stage Timings
+    estimated_cost = Column(Float, nullable=False, default=0.0)
+    actual_cost = Column(Float, nullable=False, default=0.0)
+    stage_timings_json = Column(JSON, nullable=True)  # {"Upload": 12, "ASR": 42, "Vision": 130}
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    project = relationship("Project", back_populates="videos")
     segments = relationship("VideoSegment", back_populates="video", cascade="all, delete-orphan")
     chat_sessions = relationship("ChatSession", back_populates="video", cascade="all, delete-orphan")
     hitl_reviews = relationship("HITLReview", back_populates="video", cascade="all, delete-orphan")

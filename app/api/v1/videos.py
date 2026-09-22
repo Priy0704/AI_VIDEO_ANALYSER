@@ -61,6 +61,9 @@ async def _save_uploaded_file_fast(file: UploadFile, saved_path: Path) -> int:
     return total_bytes
 
 
+from app.core.rbac import get_current_user, enforce_tenant_access
+from app.db.models import User, UserRole
+
 @router.post(
     "/upload",
     response_model=VideoUploadResponse,
@@ -69,7 +72,8 @@ async def _save_uploaded_file_fast(file: UploadFile, saved_path: Path) -> int:
 )
 async def upload_video(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Ingests an arbitrary video file (MP4, MOV, MKV, AVI).
@@ -99,8 +103,10 @@ async def upload_video(
             detail=f"Failed writing video file to storage: {str(err)}"
         )
 
-    # Create video record in PostgreSQL
+    # Create video record in PostgreSQL tied to organization and user
     video = Video(
+        organization_id=current_user.organization_id,
+        uploaded_by_user_id=current_user.id,
         filename=clean_filename,
         file_path=str(saved_path.resolve()),
         file_size_bytes=total_bytes,
@@ -131,7 +137,8 @@ async def upload_video(
 )
 async def upload_multiple_videos(
     files: List[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Accepts 1 to 10 video files at once.
@@ -158,6 +165,8 @@ async def upload_multiple_videos(
         try:
             total_bytes = await _save_uploaded_file_fast(file, saved_path)
             video = Video(
+                organization_id=current_user.organization_id,
+                uploaded_by_user_id=current_user.id,
                 filename=clean_filename,
                 file_path=str(saved_path.resolve()),
                 file_size_bytes=total_bytes,
@@ -199,24 +208,20 @@ async def upload_multiple_videos(
     "/from-url",
     response_model=VideoUploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Download and ingest a video from YouTube, Zoom, meeting recordings, camera streams, or web URLs"
-)
-@router.post(
-    "/from-url/",
-    response_model=VideoUploadResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    include_in_schema=False
+    summary="Ingest video from URL (YouTube, Vimeo, MP4 direct link, RTSP stream)"
 )
 async def ingest_video_from_url(
     payload: VideoUrlRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Downloads and ingests a video from any URL (YouTube, Zoom/Meeting recordings, Camera RTSP/HTTP streams, or direct files),
     validates the link instantly, creates a database record, and runs downloading and multimodal indexing in the background.
     """
-    url_clean = (payload.url or "").strip()
+    url_clean = str(payload.url).strip()
     url_l = url_clean.lower()
+
     if not (url_l.startswith("http://") or url_l.startswith("https://") or url_l.startswith("rtsp://") or url_l.startswith("rtmp://")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -245,6 +250,8 @@ async def ingest_video_from_url(
 
     # Create video record in PostgreSQL immediately with PROCESSING state
     video = Video(
+        organization_id=current_user.organization_id,
+        uploaded_by_user_id=current_user.id,
         filename=clean_title,
         file_path="",
         file_size_bytes=0,
@@ -274,12 +281,14 @@ async def ingest_video_from_url(
 )
 async def get_video_status(
     video_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Poll the real-time processing status of a video."""
     video = await db.get(Video, video_id)
     if not video:
         raise VideoNotFoundError(video_id)
+    enforce_tenant_access(current_user, video.organization_id)
 
     return VideoStatusResponse(
         video_id=video.id,
@@ -305,10 +314,22 @@ async def get_video_status(
 )
 async def list_videos(
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """List all ingested videos ordered by most recent."""
-    stmt = select(Video).order_by(Video.created_at.desc()).limit(limit)
+    """List all ingested videos ordered by most recent, filtered by organization and user scope."""
+    from sqlalchemy import or_, and_
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    
+    filters = []
+    if current_user.organization_id:
+        filters.append(or_(Video.organization_id == current_user.organization_id, Video.organization_id.is_(None)))
+    
+    # Non-admin users see only their own uploaded videos
+    if role_str in ["analyst", "user", "viewer"]:
+        filters.append(or_(Video.uploaded_by_user_id == current_user.id, Video.uploaded_by_user_id.is_(None)))
+
+    stmt = select(Video).where(and_(*filters)).order_by(Video.created_at.desc()).limit(limit)
     result = await db.execute(stmt)
     videos = result.scalars().all()
     return [
@@ -324,6 +345,8 @@ async def list_videos(
             video_type_label=getattr(v, "video_type_label", "Learning / Knowledge Content") or "Learning / Knowledge Content",
             video_type_confidence=getattr(v, "video_type_confidence", 0.90) or 0.90,
             video_type_reason=getattr(v, "video_type_reason", None),
+            uploaded_by_user_id=getattr(v, "uploaded_by_user_id", None),
+            uploaded_by_user_name="Priyanka (Admin)" if getattr(v, "uploaded_by_user_id", None) == "user_admin" else "Employee User",
             created_at=v.created_at,
             updated_at=v.updated_at
         )
@@ -341,6 +364,8 @@ async def get_video_detail(
     db: AsyncSession = Depends(get_db)
 ):
     """Get full video information along with all indexed multimodal segments."""
+    db.expire_all()
+    logger.info(f"get_video_detail called for {video_id} with DB URL: {settings.DATABASE_URL}")
     video = await db.get(Video, video_id)
     if not video:
         raise VideoNotFoundError(video_id)
@@ -348,6 +373,8 @@ async def get_video_detail(
     stmt = select(VideoSegment).where(VideoSegment.video_id == video_id).order_by(VideoSegment.start_time)
     result = await db.execute(stmt)
     segments = result.scalars().all()
+    if segments:
+        logger.info(f"get_video_detail retrieved segment[0] vis: {segments[0].visual_description}")
 
     return VideoDetailResponse(
         id=video.id,
