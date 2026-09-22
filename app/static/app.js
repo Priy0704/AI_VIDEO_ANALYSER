@@ -622,7 +622,7 @@ function renderLibraryList() {
 
         return `
             <div class="card" style="background:var(--bg-card); border:1px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}; padding:1rem 1.25rem; border-radius:var(--radius-md); display:flex; justify-content:space-between; align-items:center; gap:1rem;">
-                <div style="display:flex; align-items:center; gap:1rem; flex:1; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:1rem; flex:1; overflow:hidden; cursor:pointer;" onclick="openVideoStudio('${v.video_id}')" title="Click to open Studio & Copilot">
                     <div style="width:44px; height:44px; border-radius:var(--radius-sm); background:rgba(56,189,248,0.12); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
                         <i class="fa-solid fa-film"></i>
                     </div>
@@ -3361,7 +3361,7 @@ async function loadDashboardMetrics() {
                 } else {
                     adminTbody.innerHTML = videos.slice(0, 5).map(v => `
                         <tr>
-                            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
+                            <td style="cursor:pointer;" onclick="openVideoStudio('${v.video_id}')" title="Click to open Studio & Copilot"><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
                             <td><span class="filter-pill">${escapeHtml(v.uploaded_by_user_name || 'Priyanka (Admin)')}</span></td>
                             <td>${formatSeconds(v.duration_seconds || 0)}</td>
                             <td><span class="status-badge ${v.status.toLowerCase()}">${v.status}</span></td>
@@ -3405,11 +3405,11 @@ function renderEmpVideosTable() {
 
     empTbody.innerHTML = pageVideos.map(v => `
         <tr>
-            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
+            <td style="cursor:pointer;" onclick="openVideoStudio('${v.video_id}')" title="Click to open Studio & Copilot"><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
             <td>${formatSeconds(v.duration_seconds || 0)}</td>
             <td><span class="status-badge completed">${escapeHtml(v.video_type_label || 'Knowledge')}</span></td>
             <td>
-                <button class="topbar-btn btn-primary" onclick="selectVideo('${v.video_id}'); switchView('videos');" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
+                <button class="topbar-btn btn-primary" onclick="openVideoStudio('${v.video_id}')" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
                     <i class="fa-solid fa-play"></i> Open Studio &amp; Copilot
                 </button>
             </td>
@@ -3679,8 +3679,19 @@ function askDrawerQuickPrompt(text) {
 }
 
 // =========================================================================
-// Video Seek & Timestamp Playback Helpers
+// Video Seek & Studio Helpers
 // =========================================================================
+function openVideoStudio(videoId) {
+    if (typeof switchView === 'function') switchView('videos');
+    const libraryStage = document.getElementById("workspace-library-stage");
+    const studioStage = document.getElementById("workspace-studio-stage");
+    if (libraryStage) libraryStage.style.display = "none";
+    if (studioStage) studioStage.style.display = "grid";
+    if (typeof selectVideo === 'function' && videoId) {
+        selectVideo(videoId);
+    }
+}
+
 function seekAndPlayVideo(seconds) {
     if (typeof switchView === 'function') switchView('videos');
     const libraryStage = document.getElementById("workspace-library-stage");
