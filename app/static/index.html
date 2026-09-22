@@ -1153,17 +1153,16 @@
                     <div>
                         <div style="display:flex; align-items:center; gap:0.6rem;">
                             <h1 style="font-size: 1.5rem; font-weight: 800; background:linear-gradient(135deg, var(--text-main) 40%, var(--primary) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;" id="dashGreetingHeader">Hi Priyanka! 👋</h1>
-                            <span id="dashRoleBadge" class="filter-pill active" style="font-size:0.75rem;">Org Admin</span>
                         </div>
                         <p style="font-size: 0.88rem; color: var(--text-muted); margin-top:0.25rem;" id="dashGreetingSubtitle">
-                            Welcome to VideoIntel AI. Select a video from your library or ingest a new URL to begin multimodal grounding.
+                            Welcome to your workspace. Upload videos, ingest links, explore transcripts and visual insights, and ask AI Copilot questions.
                         </p>
                     </div>
                     <div style="display:flex; gap:0.75rem;">
-                        <button class="btn-landing-primary" onclick="switchView('videos'); switchUploadMode('url');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
+                        <button class="topbar-btn btn-primary" onclick="switchView('videos'); switchUploadMode('url');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
                             <i class="fa-solid fa-link"></i> Ingest Video Link
                         </button>
-                        <button class="btn-landing-secondary" onclick="switchView('videos'); switchUploadMode('file');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
+                        <button class="topbar-btn" onclick="switchView('videos'); switchUploadMode('file');" style="padding:0.65rem 1.15rem; font-size:0.85rem;">
                             <i class="fa-solid fa-upload"></i> Upload Local File
                         </button>
                     </div>
@@ -1357,6 +1356,7 @@
                                 <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading your videos...</td></tr>
                             </tbody>
                         </table>
+                        <div id="dashEmpVideoPagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border);"></div>
                     </div>
                 </div>
             </main>
@@ -1413,6 +1413,7 @@
                                 <button class="filter-pill active" id="pillFilterAll" onclick="setLibraryFilter('all')">All</button>
                                 <button class="filter-pill" id="pillFilterCompleted" onclick="setLibraryFilter('completed')">Analyzed</button>
                                 <button class="filter-pill" id="pillFilterProcessing" onclick="setLibraryFilter('processing')">Processing</button>
+                                <button class="topbar-btn btn-primary" onclick="openAllVideosCopilotDrawer()" style="font-size:0.75rem; padding:0.35rem 0.75rem;"><i class="fa-solid fa-robot"></i> All Videos Copilot</button>
                             </div>
                         </div>
 
@@ -1442,11 +1443,16 @@
                         </div>
 
                         <!-- Multimodal Sub-Navigation Tabs -->
-                        <div style="display:flex; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.2);">
-                            <button class="analysis-tab" id="tabBtnSummary" onclick="switchTab('overview')"><i class="fa-solid fa-file-lines"></i> Summary</button>
-                            <button class="analysis-tab active" id="tabBtnTranscript" onclick="switchTab('transcript')"><i class="fa-solid fa-microphone"></i> Transcript <span id="transcriptCountBadge" class="tab-badge">0</span></button>
-                            <button class="analysis-tab" id="tabBtnVisuals" onclick="switchTab('visuals')"><i class="fa-solid fa-camera"></i> Visual Scenes <span id="visualsCountBadge" class="tab-badge">0</span></button>
-                            <button class="analysis-tab" id="tabBtnQuiz" onclick="switchTab('quiz')"><i class="fa-solid fa-graduation-cap"></i> Quiz & Self-Test</button>
+                        <div style="display:flex; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.2); flex-wrap:wrap; align-items:center; justify-content:space-between; padding-right:0.5rem;">
+                            <div style="display:flex;">
+                                <button class="analysis-tab" id="tabBtnSummary" onclick="switchTab('overview')"><i class="fa-solid fa-file-lines"></i> Summary</button>
+                                <button class="analysis-tab active" id="tabBtnTranscript" onclick="switchTab('transcript')"><i class="fa-solid fa-microphone"></i> Transcript <span id="transcriptCountBadge" class="tab-badge">0</span></button>
+                                <button class="analysis-tab" id="tabBtnVisuals" onclick="switchTab('visuals')"><i class="fa-solid fa-camera"></i> Visual Scenes <span id="visualsCountBadge" class="tab-badge">0</span></button>
+                                <button class="analysis-tab" id="tabBtnQuiz" onclick="switchTab('quiz')"><i class="fa-solid fa-graduation-cap"></i> Quiz</button>
+                            </div>
+                            <button class="topbar-btn btn-primary" id="tabBtnSelfTest" onclick="openTestMyUnderstandingModal()" style="font-size:0.75rem; padding:0.3rem 0.7rem; background:linear-gradient(135deg, #10b981, #06b6d4); color:white; border:none; border-radius:9999px;">
+                                <i class="fa-solid fa-brain"></i> Test My Understanding
+                            </button>
                         </div>
 
                         <!-- Tab Content Container -->
@@ -1578,6 +1584,90 @@
                     <pre id="obsJsonText" style="margin-top:1rem; font-family:'JetBrains Mono', monospace; font-size:0.8rem; color:var(--primary); background:rgba(0,0,0,0.5); padding:1rem; border-radius:8px; overflow-x:auto;"></pre>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+       MODAL POP-UP: TEST MY UNDERSTANDING (LONG POP-UP SCREEN)
+       ========================================================================= -->
+    <div id="modalTestMyUnderstanding" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:1.5rem;">
+        <div style="background:#0b1329; border:1px solid var(--border); width:100%; max-width:850px; max-height:85vh; border-radius:var(--radius-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+            <!-- Modal Header -->
+            <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02);">
+                <div>
+                    <div style="font-size:1.15rem; font-weight:800; color:white; display:flex; align-items:center; gap:0.6rem;">
+                        <i class="fa-solid fa-brain" style="color:#10b981;"></i> Test My Understanding
+                    </div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;" id="modalSelfTestSubtitle">
+                        AI Multimodal Self-Assessment & Instant Evidence Verification
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <button class="topbar-btn btn-primary" onclick="openCopilotForCurrentVideo()" style="font-size:0.75rem; padding:0.35rem 0.75rem; background:linear-gradient(135deg, #0284c7, #6366f1); border:none;">
+                        <i class="fa-solid fa-robot"></i> Ask AI Copilot
+                    </button>
+                    <button onclick="closeTestMyUnderstandingModal()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:var(--text-main); width:32px; height:32px; border-radius:50%; cursor:pointer; font-weight:700; font-size:1rem; display:flex; align-items:center; justify-content:center;" title="Close Modal">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Content Body -->
+            <div style="padding:1.5rem; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:1.25rem;" id="modalSelfTestBody">
+                <div style="text-align:center; padding:2rem; color:var(--text-muted);">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem; color:var(--primary); margin-bottom:0.5rem;"></i>
+                    <p>Generating interactive self-assessment quiz for video...</p>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding:0.85rem 1.5rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.3);">
+                <span style="font-size:0.78rem; color:var(--text-muted);" id="modalSelfTestScoreText">Answer the questions to test your knowledge.</span>
+                <button class="topbar-btn" onclick="closeTestMyUnderstandingModal()" style="padding:0.4rem 1rem; font-size:0.82rem;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+       SIDE DRAWER: ALL VIDEOS COPILOT CHAT (HALF-SCREEN SLIDE-OUT)
+       ========================================================================= -->
+    <div id="allVideosCopilotDrawer" style="display:none; position:fixed; top:0; right:0; bottom:0; width:50vw; min-width:420px; max-width:680px; background:#070d19; border-left:1px solid var(--border); z-index:9990; flex-direction:column; box-shadow:-10px 0 30px rgba(0,0,0,0.7); backdrop-filter:blur(15px);">
+        <!-- Drawer Header -->
+        <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:rgba(15,23,42,0.8);">
+            <div>
+                <div style="font-size:1.05rem; font-weight:800; color:white; display:flex; align-items:center; gap:0.5rem;">
+                    <i class="fa-solid fa-robot" style="color:#38bdf8;"></i> All Videos AI Copilot
+                </div>
+                <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.15rem;">
+                    Multi-Video RAG Vector Search & Intelligence across workspace library
+                </div>
+            </div>
+            <button onclick="closeAllVideosCopilotDrawer()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:white; width:30px; height:30px; border-radius:50%; cursor:pointer; font-weight:700;" title="Close Chat Drawer">&times;</button>
+        </div>
+
+        <!-- Drawer Body -->
+        <div style="padding:1rem; flex:1; display:flex; flex-direction:column; gap:0.85rem; overflow-y:auto;">
+            <!-- Scope Pill Indicator -->
+            <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); font-size:0.78rem; color:#38bdf8; display:flex; align-items:center; justify-content:space-between;">
+                <span><i class="fa-solid fa-globe"></i> Active Scope: <strong>All Videos in Workspace Library</strong></span>
+                <span class="filter-pill active" style="font-size:0.7rem;" id="allVideosCountBadge">7 Videos</span>
+            </div>
+
+            <!-- Messages Stream -->
+            <div id="drawerChatContainer" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:0.75rem; min-height:250px;"></div>
+
+            <!-- Quick Chips -->
+            <div style="display:flex; gap:0.35rem; overflow-x:auto; padding-bottom:0.25rem;">
+                <button class="quick-chip" onclick="askDrawerQuickPrompt('Which videos explain Docker or Python?')">+ Compare Python vs Docker</button>
+                <button class="quick-chip" onclick="askDrawerQuickPrompt('Find all security or observational events')">+ Security events...</button>
+                <button class="quick-chip" onclick="askDrawerQuickPrompt('Summarize key topics across all videos')">+ Global summary</button>
+            </div>
+
+            <!-- Input Box -->
+            <div style="display:flex; gap:0.4rem;">
+                <input type="text" id="drawerChatInput" placeholder="Ask anything across all workspace videos..." style="flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--border); padding:0.6rem 0.85rem; border-radius:var(--radius-sm); color:white; outline:none; font-size:0.85rem;" onkeypress="if(event.key==='Enter') sendDrawerChatMessage()">
+                <button class="topbar-btn btn-primary" onclick="sendDrawerChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
         </div>
     </div>
 

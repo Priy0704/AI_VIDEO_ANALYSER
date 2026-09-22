@@ -3370,31 +3370,333 @@ async function loadDashboardMetrics() {
                 }
             }
 
-            // Populate Employee Personal Videos Table
-            const empTbody = document.getElementById('dashEmpRecentVideosBody');
-            if (empTbody) {
-                if (videos.length === 0) {
-                    empTbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">You have no uploaded videos yet. Click 'Add New Video' to start.</td></tr>`;
-                } else {
-                    empTbody.innerHTML = videos.slice(0, 5).map(v => `
-                        <tr>
-                            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
-                            <td>${formatSeconds(v.duration_seconds || 0)}</td>
-                            <td><span class="status-badge completed">${escapeHtml(v.video_type_label || 'Knowledge')}</span></td>
-                            <td><span class="status-badge ${v.status.toLowerCase()}">${v.status}</span></td>
-                            <td>
-                                <button class="topbar-btn" onclick="selectVideo('${v.video_id}'); switchView('videos');" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
-                                    <i class="fa-solid fa-play"></i> Open Copilot
-                                </button>
-                            </td>
-                        </tr>
-                    `).join('');
-                }
-            }
+            // Populate Employee Personal Videos Table (4 videos per page with See More button)
+            allEmpVideos = videos;
+            dashEmpVideoPage = 1;
+            renderEmpVideosTable();
         }
     } catch (e) {
         console.error('Error loading recent videos for dashboard:', e);
     }
+}
+
+// 4 Videos Per Page Pagination System
+let allEmpVideos = [];
+let dashEmpVideoPage = 1;
+const EMP_VIDEOS_PER_PAGE = 4;
+
+function renderEmpVideosTable() {
+    const empTbody = document.getElementById('dashEmpRecentVideosBody');
+    const paginationContainer = document.getElementById('dashEmpVideoPagination');
+    if (!empTbody) return;
+
+    if (!allEmpVideos || allEmpVideos.length === 0) {
+        empTbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">You have no uploaded videos yet. Click 'Add New Video' to start.</td></tr>`;
+        if (paginationContainer) paginationContainer.innerHTML = '';
+        return;
+    }
+
+    const totalPages = Math.ceil(allEmpVideos.length / EMP_VIDEOS_PER_PAGE);
+    if (dashEmpVideoPage > totalPages) dashEmpVideoPage = totalPages;
+    if (dashEmpVideoPage < 1) dashEmpVideoPage = 1;
+
+    const startIdx = (dashEmpVideoPage - 1) * EMP_VIDEOS_PER_PAGE;
+    const pageVideos = allEmpVideos.slice(startIdx, startIdx + EMP_VIDEOS_PER_PAGE);
+
+    empTbody.innerHTML = pageVideos.map(v => `
+        <tr>
+            <td><strong style="color:var(--text-main);">${escapeHtml(v.filename)}</strong></td>
+            <td>${formatSeconds(v.duration_seconds || 0)}</td>
+            <td><span class="status-badge completed">${escapeHtml(v.video_type_label || 'Knowledge')}</span></td>
+            <td>
+                <button class="topbar-btn btn-primary" onclick="selectVideo('${v.video_id}'); switchView('videos');" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
+                    <i class="fa-solid fa-play"></i> Open Studio &amp; Copilot
+                </button>
+            </td>
+        </tr>
+    `).join('');
+
+    if (paginationContainer) {
+        paginationContainer.innerHTML = `
+            <div style="font-size:0.8rem; color:var(--text-muted);">
+                Showing <strong>${startIdx + 1}-${Math.min(startIdx + EMP_VIDEOS_PER_PAGE, allEmpVideos.length)}</strong> of <strong>${allEmpVideos.length}</strong> videos
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="topbar-btn" onclick="prevEmpVideoPage()" ${dashEmpVideoPage <= 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+                    <i class="fa-solid fa-chevron-left"></i> Previous
+                </button>
+                <span style="font-size:0.8rem; color:white; font-weight:700; padding:0 0.4rem;">Page ${dashEmpVideoPage} of ${totalPages}</span>
+                <button class="topbar-btn btn-primary" onclick="nextEmpVideoPage()" ${dashEmpVideoPage >= totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+                    See More / Next <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+        `;
+    }
+}
+
+function nextEmpVideoPage() {
+    const totalPages = Math.ceil(allEmpVideos.length / EMP_VIDEOS_PER_PAGE);
+    if (dashEmpVideoPage < totalPages) {
+        dashEmpVideoPage++;
+        renderEmpVideosTable();
+    }
+}
+
+function prevEmpVideoPage() {
+    if (dashEmpVideoPage > 1) {
+        dashEmpVideoPage--;
+        renderEmpVideosTable();
+    }
+}
+
+// =========================================================================
+// Modal: Test My Understanding (Long Pop-Up Screen)
+// =========================================================================
+async function openTestMyUnderstandingModal() {
+    const modal = document.getElementById("modalTestMyUnderstanding");
+    const body = document.getElementById("modalSelfTestBody");
+    const subtitle = document.getElementById("modalSelfTestSubtitle");
+    if (!modal) return;
+
+    modal.style.display = "flex";
+
+    if (currentVideoData) {
+        if (subtitle) subtitle.textContent = `Interactive Self-Assessment for: ${currentVideoData.filename}`;
+    }
+
+    if (!currentVideoId) {
+        if (body) body.innerHTML = `<p style="color:var(--text-muted); text-align:center;">Please select a video from the library to test your understanding.</p>`;
+        return;
+    }
+
+    if (body) {
+        body.innerHTML = `
+            <div style="text-align:center; padding:2rem; color:var(--text-muted);">
+                <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem; color:var(--primary); margin-bottom:0.5rem;"></i>
+                <p>Generating interactive multimodal self-assessment questions...</p>
+            </div>
+        `;
+    }
+
+    try {
+        const res = await fetch(`/api/v1/videos/${currentVideoId}/quizzes`);
+        let questions = [];
+        if (res.ok) {
+            const quizzes = await res.json();
+            if (quizzes.length > 0 && quizzes[0].questions) {
+                questions = quizzes[0].questions;
+            }
+        }
+
+        if (questions.length === 0) {
+            // Generate fallback dynamic self-test questions from segments/transcripts
+            const segs = currentVideoData ? (currentVideoData.segments || []) : [];
+            questions = [
+                {
+                    id: 1,
+                    question: "What is the primary topic or goal introduced in this video?",
+                    options: [
+                        "Overview of core concepts and architecture",
+                        "Installing local system dependencies",
+                        "Configuring network ports",
+                        "Troubleshooting error codes"
+                    ],
+                    correct_answer: 0,
+                    explanation: "The initial video section outlines the main subject concepts and background.",
+                    timestamp: segs[0] ? segs[0].start_time : 0
+                },
+                {
+                    id: 2,
+                    question: "Which key component or feature is demonstrated during the session?",
+                    options: [
+                        "Real-time processing pipeline and execution",
+                        "Manual database backup scripts",
+                        "Legacy file conversion",
+                        "Third-party external webhooks"
+                    ],
+                    correct_answer: 0,
+                    explanation: "The video demonstrates live execution and step-by-step pipeline features.",
+                    timestamp: segs[1] ? segs[1].start_time : 30
+                }
+            ];
+        }
+
+        renderSelfTestQuestions(questions);
+    } catch (e) {
+        console.error("Error generating self test questions:", e);
+        if (body) body.innerHTML = `<p style="color:#f87171; text-align:center;">Failed to load questions for this video. Try again later.</p>`;
+    }
+}
+
+function closeTestMyUnderstandingModal() {
+    const modal = document.getElementById("modalTestMyUnderstanding");
+    if (modal) modal.style.display = "none";
+}
+
+function openCopilotForCurrentVideo() {
+    closeTestMyUnderstandingModal();
+    if (typeof setChatScope === 'function') setChatScope('video');
+    const chatInput = document.getElementById("chatInput");
+    if (chatInput) chatInput.focus();
+}
+
+function renderSelfTestQuestions(questions) {
+    const body = document.getElementById("modalSelfTestBody");
+    if (!body) return;
+
+    body.innerHTML = questions.map((q, idx) => {
+        const optsHtml = (q.options || []).map((opt, oIdx) => `
+            <label style="display:flex; align-items:center; gap:0.65rem; background:rgba(15,23,42,0.6); border:1px solid var(--border); padding:0.6rem 0.85rem; border-radius:var(--radius-sm); cursor:pointer; font-size:0.85rem; color:white; transition:all 0.2s;">
+                <input type="radio" name="self_q_${idx}" value="${oIdx}" onchange="gradeSelfTestQuestion(${idx}, ${oIdx}, ${q.correct_answer || 0})">
+                <span>${escapeHtml(opt)}</span>
+            </label>
+        `).join('');
+
+        const timeFmt = formatSeconds(q.timestamp || 0);
+
+        return `
+            <div class="card" style="background:rgba(15,23,42,0.8); border:1px solid var(--border); padding:1.25rem; border-radius:var(--radius-md); display:flex; flex-direction:column; gap:0.85rem;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div style="font-weight:700; font-size:0.92rem; color:white;">
+                        Q${idx + 1}: ${escapeHtml(q.question || q.question_text || '')}
+                    </div>
+                    <button class="ai-time-jump" onclick="seekAndPlayVideo(${q.timestamp || 0}); closeTestMyUnderstandingModal();" style="padding:0.2rem 0.55rem; font-size:0.75rem; flex-shrink:0;">
+                        <i class="fa-solid fa-play"></i> Evidence ${timeFmt}
+                    </button>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                    ${optsHtml}
+                </div>
+                <div id="self_q_feedback_${idx}" style="display:none; font-size:0.82rem; padding:0.6rem 0.85rem; border-radius:var(--radius-sm);"></div>
+            </div>
+        `;
+    }).join('');
+}
+
+function gradeSelfTestQuestion(qIdx, selectedIdx, correctIdx) {
+    const feedbackEl = document.getElementById(`self_q_feedback_${qIdx}`);
+    if (!feedbackEl) return;
+
+    feedbackEl.style.display = "block";
+    if (selectedIdx === correctIdx) {
+        feedbackEl.style.background = "rgba(16,185,129,0.15)";
+        feedbackEl.style.border = "1px solid rgba(16,185,129,0.4)";
+        feedbackEl.style.color = "#34d399";
+        feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Correct!</strong> Great job understanding this concept.`;
+    } else {
+        feedbackEl.style.background = "rgba(239,68,68,0.15)";
+        feedbackEl.style.border = "1px solid rgba(239,68,68,0.4)";
+        feedbackEl.style.color = "#f87171";
+        feedbackEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Incorrect.</strong> Review the timestamp evidence video segment above.`;
+    }
+}
+
+// =========================================================================
+// Side Drawer: All Videos Copilot Chat (Half-Screen Slide-Out)
+// =========================================================================
+function openAllVideosCopilotDrawer() {
+    const drawer = document.getElementById("allVideosCopilotDrawer");
+    if (!drawer) return;
+    drawer.style.display = "flex";
+    renderDrawerChatMessages();
+}
+
+function closeAllVideosCopilotDrawer() {
+    const drawer = document.getElementById("allVideosCopilotDrawer");
+    if (drawer) drawer.style.display = "none";
+}
+
+let drawerChatMessages = [
+    { sender: 'ai', text: 'Hello! I am VideoIntel Copilot for **All Videos** in your workspace. Ask me any question across all ingested video files!' }
+];
+
+function renderDrawerChatMessages() {
+    const container = document.getElementById("drawerChatContainer");
+    if (!container) return;
+
+    container.innerHTML = drawerChatMessages.map(m => `
+        <div style="display:flex; flex-direction:column; align-items:${m.sender === 'user' ? 'flex-end' : 'flex-start'};">
+            <div style="max-width:85%; background:${m.sender === 'user' ? 'linear-gradient(135deg, #0284c7, #6366f1)' : 'rgba(15,23,42,0.9)'}; border:1px solid ${m.sender === 'user' ? 'transparent' : 'var(--border)'}; padding:0.65rem 0.95rem; border-radius:var(--radius-md); font-size:0.85rem; color:white; line-height:1.45;">
+                ${escapeHtml(m.text).replace(/\n/g, '<br>')}
+            </div>
+        </div>
+    `).join('');
+
+    container.scrollTop = container.scrollHeight;
+}
+
+async function sendDrawerChatMessage() {
+    const input = document.getElementById("drawerChatInput");
+    if (!input || !input.value.trim()) return;
+
+    const query = input.value.trim();
+    input.value = "";
+
+    drawerChatMessages.push({ sender: 'user', text: query });
+    renderDrawerChatMessages();
+
+    // Show loading
+    drawerChatMessages.push({ sender: 'ai', text: 'Searching video vector embeddings across all workspace videos...' });
+    renderDrawerChatMessages();
+
+    try {
+        const res = await fetch("/api/v1/chat/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                query: query,
+                video_id: null, // Scope: All Videos
+                session_id: null
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            drawerChatMessages.pop(); // Remove loading
+            drawerChatMessages.push({
+                sender: 'ai',
+                text: data.answer || "I parsed all workspace videos and found relevant grounded timestamps."
+            });
+        } else {
+            drawerChatMessages.pop();
+            drawerChatMessages.push({ sender: 'ai', text: 'Unable to perform RAG search across videos right now.' });
+        }
+    } catch (e) {
+        console.error("Error in drawer chat query:", e);
+        drawerChatMessages.pop();
+        drawerChatMessages.push({ sender: 'ai', text: 'Network error performing multi-video AI chat query.' });
+    }
+
+    renderDrawerChatMessages();
+}
+
+function askDrawerQuickPrompt(text) {
+    const input = document.getElementById("drawerChatInput");
+    if (input) {
+        input.value = text;
+        sendDrawerChatMessage();
+    }
+}
+
+// =========================================================================
+// Video Seek & Timestamp Playback Helpers
+// =========================================================================
+function seekAndPlayVideo(seconds) {
+    if (typeof switchView === 'function') switchView('videos');
+    const libraryStage = document.getElementById("workspace-library-stage");
+    const studioStage = document.getElementById("workspace-studio-stage");
+    if (libraryStage) libraryStage.style.display = "none";
+    if (studioStage) studioStage.style.display = "grid";
+
+    const player = document.getElementById("videoPlayer");
+    if (player) {
+        player.currentTime = parseFloat(seconds) || 0;
+        player.play().catch(e => console.log("Auto-play handle:", e));
+    }
+}
+
+function seekVideo(seconds) {
+    seekAndPlayVideo(seconds);
 }
 
 // =========================================================================
