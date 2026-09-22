@@ -3897,15 +3897,20 @@ function switchView(viewName, isHistoryNav = false) {
 
     // Update Sidebar Navigation highlights
     document.querySelectorAll('.sidebar-menu .nav-item').forEach(item => item.classList.remove('active'));
-    const navMap = {
-        'dashboard': 'sidebarNavDashboard',
-        'videos': 'sidebarNavVideos',
-        'audit': 'sidebarNavAudit',
-        'team': 'sidebarNavTeam'
-    };
-    if (navMap[viewName]) {
-        const activeNav = document.getElementById(navMap[viewName]);
-        if (activeNav) activeNav.classList.add('active');
+    if (viewName === 'dashboard') {
+        const el = document.getElementById('sidebarNavDashboard');
+        if (el) el.classList.add('active');
+    } else if (viewName === 'videos') {
+        const elIngest = document.getElementById('sidebarNavIngest');
+        const elVideos = document.getElementById('sidebarNavVideos');
+        if (elIngest) elIngest.classList.add('active');
+        if (elVideos) elVideos.classList.add('active');
+    } else if (viewName === 'audit') {
+        const el = document.getElementById('sidebarNavAudit');
+        if (el) el.classList.add('active');
+    } else if (viewName === 'team') {
+        const el = document.getElementById('sidebarNavTeam');
+        if (el) el.classList.add('active');
     }
 
     if (viewName === 'dashboard') {
