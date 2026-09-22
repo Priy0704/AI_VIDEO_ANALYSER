@@ -3679,25 +3679,51 @@ function askDrawerQuickPrompt(text) {
 }
 
 // =========================================================================
-// Video Seek & Studio Helpers
+// Video Seek & Studio Stage Navigation Helpers
 // =========================================================================
-function openVideoStudio(videoId) {
-    if (typeof switchView === 'function') switchView('videos');
-    const libraryStage = document.getElementById("workspace-library-stage");
-    const studioStage = document.getElementById("workspace-studio-stage");
-    if (libraryStage) libraryStage.style.display = "none";
-    if (studioStage) studioStage.style.display = "grid";
-    if (typeof selectVideo === 'function' && videoId) {
-        selectVideo(videoId);
+function updateSidebarNavHighlight(activeId) {
+    document.querySelectorAll('.sidebar-menu .nav-item').forEach(item => item.classList.remove('active'));
+    if (activeId) {
+        const el = document.getElementById(activeId);
+        if (el) el.classList.add('active');
     }
 }
 
-function seekAndPlayVideo(seconds) {
-    if (typeof switchView === 'function') switchView('videos');
+function openIngestStage() {
+    switchView('videos');
+    const libraryStage = document.getElementById("workspace-library-stage");
+    const studioStage = document.getElementById("workspace-studio-stage");
+    if (libraryStage) libraryStage.style.display = "flex";
+    if (studioStage) studioStage.style.display = "none";
+    updateSidebarNavHighlight('sidebarNavIngest');
+}
+
+function openVideosAnalysisStage() {
+    switchView('videos');
     const libraryStage = document.getElementById("workspace-library-stage");
     const studioStage = document.getElementById("workspace-studio-stage");
     if (libraryStage) libraryStage.style.display = "none";
     if (studioStage) studioStage.style.display = "grid";
+    updateSidebarNavHighlight('sidebarNavVideos');
+
+    if (!currentVideoId && libraryVideosCache && libraryVideosCache.length > 0) {
+        selectVideo(libraryVideosCache[0].video_id);
+    }
+}
+
+function backToVideoLibrary() {
+    openIngestStage();
+}
+
+function openVideoStudio(videoId) {
+    if (videoId && typeof selectVideo === 'function') {
+        selectVideo(videoId);
+    }
+    openVideosAnalysisStage();
+}
+
+function seekAndPlayVideo(seconds) {
+    openVideosAnalysisStage();
 
     const player = document.getElementById("videoPlayer");
     if (player) {
@@ -3909,19 +3935,18 @@ function switchView(viewName, isHistoryNav = false) {
     // Update Sidebar Navigation highlights
     document.querySelectorAll('.sidebar-menu .nav-item').forEach(item => item.classList.remove('active'));
     if (viewName === 'dashboard') {
-        const el = document.getElementById('sidebarNavDashboard');
-        if (el) el.classList.add('active');
+        updateSidebarNavHighlight('sidebarNavDashboard');
     } else if (viewName === 'videos') {
-        const elIngest = document.getElementById('sidebarNavIngest');
-        const elVideos = document.getElementById('sidebarNavVideos');
-        if (elIngest) elIngest.classList.add('active');
-        if (elVideos) elVideos.classList.add('active');
+        const studioStage = document.getElementById("workspace-studio-stage");
+        if (studioStage && studioStage.style.display === "grid") {
+            updateSidebarNavHighlight('sidebarNavVideos');
+        } else {
+            updateSidebarNavHighlight('sidebarNavIngest');
+        }
     } else if (viewName === 'audit') {
-        const el = document.getElementById('sidebarNavAudit');
-        if (el) el.classList.add('active');
+        updateSidebarNavHighlight('sidebarNavAudit');
     } else if (viewName === 'team') {
-        const el = document.getElementById('sidebarNavTeam');
-        if (el) el.classList.add('active');
+        updateSidebarNavHighlight('sidebarNavTeam');
     }
 
     if (viewName === 'dashboard') {
