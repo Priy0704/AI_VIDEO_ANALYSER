@@ -597,7 +597,7 @@ function renderLibraryList() {
         if (libraryFilter === 'completed' && v.status !== 'completed') return false;
         if (libraryFilter === 'processing' && (v.status !== 'processing' && v.status !== 'queued')) return false;
         if (query && !v.filename.toLowerCase().includes(query)) return false;
-        
+
         // User isolation: if normal user, only show videos owned by current user
         if (currentUserRole === 'analyst' || currentUserRole === 'viewer') {
             if (v.uploaded_by_user_id === 'user_admin') return false;
@@ -615,8 +615,8 @@ function renderLibraryList() {
         let statusBadge = (v.status === 'completed')
             ? `<span style="color: #34d399; font-weight:700;"><i class="fa-solid fa-circle-check"></i> Analyzed</span>`
             : (v.status === 'failed')
-            ? `<span style="color: #f87171; font-weight:700;"><i class="fa-solid fa-circle-exclamation"></i> Failed</span>`
-            : `<span style="color: #38bdf8; font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Processing ${v.progress_pct || 0}%</span>`;
+                ? `<span style="color: #f87171; font-weight:700;"><i class="fa-solid fa-circle-exclamation"></i> Failed</span>`
+                : `<span style="color: #38bdf8; font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Processing ${v.progress_pct || 0}%</span>`;
 
         const uploaderName = v.uploaded_by_user_name || 'Priyanka Davhare (Admin)';
 
@@ -3322,7 +3322,7 @@ async function loadDashboardMetrics() {
         const res = await fetch('/api/v1/analytics/summary');
         if (res.ok) {
             const data = await res.json();
-            
+
             // Admin KPI Metrics
             const elAdminUsers = document.getElementById('dashAdminUsersCount');
             if (elAdminUsers) elAdminUsers.textContent = '5 Users';
@@ -3352,7 +3352,7 @@ async function loadDashboardMetrics() {
         const res = await fetch('/api/v1/videos');
         if (res.ok) {
             const videos = await res.json();
-            
+
             // Populate Admin Recent Videos Table
             const adminTbody = document.getElementById('dashAdminRecentVideosBody');
             if (adminTbody) {
@@ -3945,7 +3945,7 @@ function setRoleMode(role) {
     const greetingHeader = document.getElementById('dashGreetingHeader');
     const greetingSubtitle = document.getElementById('dashGreetingSubtitle');
     const dashRoleBadge = document.getElementById('dashRoleBadge');
-    
+
     const adminOpsSection = document.getElementById('sidebarEnterpriseOpsSection');
     const adminOpsNav = document.getElementById('sidebarEnterpriseOpsNav');
     const adminDashView = document.getElementById('dashAdminView');
@@ -3968,8 +3968,8 @@ function setRoleMode(role) {
         greetingHeader.textContent = isNormalUser ? 'Hi Priyanka! 👋' : 'Hi Priyanka! 👋';
     }
     if (greetingSubtitle) {
-        greetingSubtitle.textContent = isNormalUser 
-            ? 'Welcome to your employee workspace. Upload video files, ingest links, view your transcripts, and ask AI Copilot.'
+        greetingSubtitle.textContent = isNormalUser
+            ? 'Welcome to your workspace. Upload videos, ingest links, explore transcripts and visual insights, and ask AI Copilot questions.'
             : 'Welcome to your admin command center. View system metrics, enrolled organization users, and security audit logs.';
     }
 
@@ -4000,7 +4000,7 @@ function loginAndLaunchApp() {
     document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
     const p = document.getElementById('page-app');
     if (p) p.classList.add('active');
-    
+
     // FIRST SLIDE AFTER LOGIN IS DASHBOARD!
     switchView('dashboard');
 }
@@ -4100,7 +4100,7 @@ function toggleFaqAnswer(el) {
     const answer = item.querySelector('.faq-answer');
     const icon = item.querySelector('.faq-icon');
     const isOpen = item.classList.contains('active');
-    
+
     document.querySelectorAll('.faq-item').forEach(i => {
         i.classList.remove('active');
         const a = i.querySelector('.faq-answer');
