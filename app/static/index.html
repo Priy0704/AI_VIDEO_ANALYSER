@@ -749,7 +749,6 @@
             <ul class="landing-nav-links">
                 <li><a class="landing-nav-link" onclick="scrollToSection('how-it-works')">How It Works</a></li>
                 <li><a class="landing-nav-link" onclick="scrollToSection('features')">Features</a></li>
-                <li><a class="landing-nav-link" onclick="scrollToSection('pricing')">Pricing</a></li>
                 <li><a class="landing-nav-link" onclick="scrollToSection('faq')">FAQ</a></li>
             </ul>
 
@@ -757,7 +756,7 @@
                 <button class="topbar-btn" onclick="showLoginPage()" style="padding:0.6rem 1.1rem; font-size:0.88rem;">
                     Sign In <i class="fa-solid fa-right-to-bracket"></i>
                 </button>
-                <button class="btn-landing-primary" onclick="loginAndLaunchApp()" style="padding:0.65rem 1.35rem; font-size:0.88rem;">
+                <button class="btn-landing-primary" onclick="showLoginPage()" style="padding:0.65rem 1.35rem; font-size:0.88rem;">
                     Get Started Free <i class="fa-solid fa-arrow-right"></i>
                 </button>
             </div>
@@ -778,11 +777,11 @@
             </p>
 
             <div class="landing-cta-group">
-                <button class="btn-landing-primary" onclick="loginAndLaunchApp()">
-                    Launch Enterprise Workspace <i class="fa-solid fa-rocket"></i>
+                <button class="btn-landing-primary" onclick="showLoginPage()">
+                    Get Started Free <i class="fa-solid fa-rocket"></i>
                 </button>
                 <button class="btn-landing-secondary" onclick="showLoginPage()">
-                    Sign In to Tenant <i class="fa-solid fa-building-shield"></i>
+                    Sign In to Workspace <i class="fa-solid fa-building-shield"></i>
                 </button>
                 <button class="btn-landing-secondary" onclick="scrollToSection('how-it-works')">
                     See How It Works <i class="fa-solid fa-chevron-down"></i>
@@ -966,65 +965,6 @@
             </div>
         </div>
 
-        <!-- Section: Pricing Tiers -->
-        <div id="pricing" class="landing-section-wrapper">
-            <div class="landing-section-header">
-                <div style="font-size:0.8rem; color:#38bdf8; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.5rem;">Simple & Transparent Pricing</div>
-                <h2>Flexible Plans for Every Enterprise</h2>
-                <p>Start free today and scale as your video intelligence needs grow.</p>
-            </div>
-
-            <div class="pricing-grid">
-                <!-- Plan 1 -->
-                <div class="pricing-card">
-                    <div>
-                        <h3 style="font-size:1.2rem; font-weight:700; color:white; margin-bottom:0.5rem;">Developer Free</h3>
-                        <div style="font-size:2rem; font-weight:800; color:white; margin-bottom:1rem;">$0 <span style="font-size:0.9rem; color:#94a3b8; font-weight:500;">/ month</span></div>
-                        <ul style="list-style:none; padding:0; margin:0 0 1.5rem; display:flex; flex-direction:column; gap:0.6rem; font-size:0.85rem; color:#cbd5e1;">
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> 5 Video Analyses / month</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Single Video Copilot Q&A</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Whisper ASR Transcripts</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> 1 Project Workspace</li>
-                        </ul>
-                    </div>
-                    <button class="btn-landing-secondary" onclick="loginAndLaunchApp()" style="width:100%; justify-content:center;">Get Started Free</button>
-                </div>
-
-                <!-- Plan 2 (Popular) -->
-                <div class="pricing-card popular">
-                    <div class="popular-badge">Most Popular</div>
-                    <div>
-                        <h3 style="font-size:1.2rem; font-weight:700; color:white; margin-bottom:0.5rem;">Business Pro</h3>
-                        <div style="font-size:2rem; font-weight:800; color:#38bdf8; margin-bottom:1rem;">$99 <span style="font-size:0.9rem; color:#94a3b8; font-weight:500;">/ month</span></div>
-                        <ul style="list-style:none; padding:0; margin:0 0 1.5rem; display:flex; flex-direction:column; gap:0.6rem; font-size:0.85rem; color:#cbd5e1;">
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> 100 Video Analyses / month</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Multi-Video Vector Search RAG</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Auto Quiz & Summary Generator</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Token Usage Ledger & Cost Benchmarks</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Up to 10 Team Members</li>
-                        </ul>
-                    </div>
-                    <button class="btn-landing-primary" onclick="loginAndLaunchApp()" style="width:100%; justify-content:center;">Start 14-Day Free Trial</button>
-                </div>
-
-                <!-- Plan 3 -->
-                <div class="pricing-card">
-                    <div>
-                        <h3 style="font-size:1.2rem; font-weight:700; color:white; margin-bottom:0.5rem;">Enterprise Custom</h3>
-                        <div style="font-size:2rem; font-weight:800; color:white; margin-bottom:1rem;">Custom <span style="font-size:0.9rem; color:#94a3b8; font-weight:500;">pricing</span></div>
-                        <ul style="list-style:none; padding:0; margin:0 0 1.5rem; display:flex; flex-direction:column; gap:0.6rem; font-size:0.85rem; color:#cbd5e1;">
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Unlimited Video Ingestion</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Dedicated pgvector RAG Instance</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Full HITL Governance & SLA Queue</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> Custom Role & RBAC Policies</li>
-                            <li><i class="fa-solid fa-check" style="color:#10b981; margin-right:0.5rem;"></i> 24/7 Priority Support & Dedicated Manager</li>
-                        </ul>
-                    </div>
-                    <button class="btn-landing-secondary" onclick="showLoginPage()" style="width:100%; justify-content:center;">Contact Sales</button>
-                </div>
-            </div>
-        </div>
-
         <!-- Section: FAQ Accordion -->
         <div id="faq" class="landing-section-wrapper" style="max-width:850px;">
             <div class="landing-section-header">
@@ -1081,7 +1021,7 @@
                         <i class="fa-solid fa-chevron-down faq-icon"></i>
                     </div>
                     <div class="faq-answer">
-                        Yes. VideoIntel AI implements strict Organization and Workspace multi-tenant database isolation. Roles (Org Admin, Manager, Analyst, Viewer) govern API access and audit logs capture every user query, upload, and data modification.
+                        Yes. VideoIntel AI implements strict Organization and Workspace multi-tenant database isolation. Roles govern API access and audit logs capture every user query, upload, and data modification.
                     </div>
                 </div>
             </div>
@@ -1100,7 +1040,6 @@
                 <div style="display:flex; gap:1.5rem; font-size:0.85rem; color:#94a3b8;">
                     <a onclick="scrollToSection('how-it-works')" style="cursor:pointer; color:#94a3b8;">How It Works</a>
                     <a onclick="scrollToSection('features')" style="cursor:pointer; color:#94a3b8;">Features</a>
-                    <a onclick="scrollToSection('pricing')" style="cursor:pointer; color:#94a3b8;">Pricing</a>
                     <a onclick="scrollToSection('faq')" style="cursor:pointer; color:#94a3b8;">FAQ</a>
                     <a onclick="showLoginPage()" style="cursor:pointer; color:#38bdf8;">Tenant Sign In</a>
                 </div>
@@ -1108,10 +1047,6 @@
 
             <div style="max-width:1200px; margin:1.5rem auto 0; display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; color:var(--text-muted);">
                 <div>© 2026 VideoIntel AI Inc. All rights reserved. Enterprise Multimodal Video Intelligence Platform.</div>
-                <div style="display:flex; gap:1rem;">
-                    <span><i class="fa-solid fa-lock" style="color:#10b981;"></i> SOC2 Type II Ready</span>
-                    <span><i class="fa-solid fa-shield" style="color:#38bdf8;"></i> Tenant Isolated</span>
-                </div>
             </div>
         </footer>
     </div>

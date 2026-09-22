@@ -3637,14 +3637,16 @@ function setRoleMode(role) {
     const empDashView = document.getElementById('dashEmployeeView');
 
     if (badge) {
-        badge.textContent = (role === 'org_admin') ? 'Org Admin' : (role === 'manager') ? 'Manager' : 'Employee (Normal User)';
+        badge.textContent = '';
+        badge.style.display = 'none';
     }
     if (topbarBadge) {
-        topbarBadge.textContent = isNormalUser ? 'EMPLOYEE USER' : role.toUpperCase().replace('_', ' ');
+        topbarBadge.textContent = '';
+        topbarBadge.style.display = 'none';
     }
     if (dashRoleBadge) {
-        dashRoleBadge.textContent = isNormalUser ? 'Employee User' : 'Org Admin';
-        dashRoleBadge.className = isNormalUser ? 'filter-pill' : 'filter-pill active';
+        dashRoleBadge.textContent = '';
+        dashRoleBadge.style.display = 'none';
     }
 
     if (greetingHeader) {
